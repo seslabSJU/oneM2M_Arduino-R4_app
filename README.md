@@ -11,10 +11,13 @@
 <img src="./img/ArduinoIDE.jpg">
 
 ## User Guide
-First, Create arduino_secrets.h. \
-Second, Define SSID and PASSWORD.
+First, Create arduino_secrets.h  
+And define SSID and PASSWORD
+
 ```c
 #define SECRET_SSID "..."
 #define SECRET_PASS "..."
 ```
-Third, Download latest "ArduinoJson" library using library manager in arduino IDE.
+Second, Download latest "ArduinoJson" library using library manager in arduino IDE.
+
+<img src="./img/updatelibrary.png">
