@@ -43,17 +43,26 @@
 <img src="./img/CircuitConfig.png">
 
 ## Software
-Arduino IDE
+- **Arduino IDE**
 <img src="./img/ArduinoIDE.jpg">
 
 ## User Guide
-First, Create arduino_secrets.h  
-And define SSID and PASSWORD
+- **First, Create arduino_secrets.h and define SSID and PASSWORD**
 
 ```c
 #define SECRET_SSID "..."
 #define SECRET_PASS "..."
 ```
-Second, Download latest "ArduinoJson" library using library manager in arduino IDE.
+- **Second, Download latest "ArduinoJson" library using library manager in arduino IDE.**
 
 <img src="./img/updatelibrary.png">
+
+- **Third, set ip address of server using wireless lan adapter Wi-Fi ipv4 address of your pc.**
+
+<img src="./img/Show_Ip.jpg">
+
+<img src="./img/WiFi_Address.jpg">
+
+```c
+const char *server = "Your_ipv4_Address";
+```
