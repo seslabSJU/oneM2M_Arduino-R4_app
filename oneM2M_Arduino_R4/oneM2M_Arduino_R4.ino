@@ -18,7 +18,7 @@ char ssid[] = SECRET_SSID;  // your network SSID (name)
 char pass[] = SECRET_PASS;  // your network password (use for WPA, or use as key for WEP)
 int keyIndex = 0;           // your network key index number (needed only for WEP)
 
-const char *server = "192.168.4.29";  // your pc ip address
+const char *server = "Your_ipv4_Address";  // your pc ip address
 const int port = 3000;
 int status = WL_IDLE_STATUS;
 
