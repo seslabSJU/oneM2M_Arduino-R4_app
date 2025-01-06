@@ -1,2 +1,2 @@
-#define SECRET_SSID "WIFI_SSID"
-#define SECRET_PASS "WIFI_PASSWORD"
+#define SECRET_SSID "Galaxy A53"
+#define SECRET_PASS "starfish1440#"

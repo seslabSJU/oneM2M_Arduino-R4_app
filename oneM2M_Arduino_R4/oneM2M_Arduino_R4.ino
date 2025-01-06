@@ -1,7 +1,9 @@
-#include "arduino_secrets.h"
 #include <WiFiS3.h>
 #include <ArduinoJson.h>
 #include <assert.h>
+
+#include "arduino_secrets.h"
+#include "pitches.h"
 
 // C++ code
 #define ARDUINOJSON_SLOT_ID_SIZE 1
@@ -16,9 +18,17 @@ char ssid[] = SECRET_SSID;  // your network SSID (name)
 char pass[] = SECRET_PASS;  // your network password (use for WPA, or use as key for WEP)
 int keyIndex = 0;           // your network key index number (needed only for WEP)
 
-const char *server = "192.168.4.29";
+const char *server = "192.168.4.29";  // your pc ip address
 const int port = 3000;
 int status = WL_IDLE_STATUS;
+
+int melody[] = {
+  NOTE_C4, NOTE_G3, NOTE_G3, NOTE_A3, NOTE_G3, 0, NOTE_B3, NOTE_C4
+};
+
+int noteDurations[] = {
+  4, 8, 8, 4, 4, 4, 4, 4
+};
 
 WiFiClient wifi;
 
@@ -105,6 +115,7 @@ void loop() {
 /* Set Device */
 void setDevice(){
   Serial.println(F("Setup Started!"));
+  startMelody();
 
   /* Check Arduino AE exists in TinyIoT if not create Arduino AE, CNT */
   int status = get("/TinyIoT/Arduino");
@@ -129,6 +140,7 @@ void setDevice(){
   }
   delay(60000);
 
+  startMelody();
   Serial.println(F("Setup completed!"));
 }
 
@@ -301,4 +313,15 @@ void printWifiStatus() {
   Serial.print(F("signal strength (RSSI):"));
   Serial.print(rssi);
   Serial.println(F(" dBm"));
+}
+
+void startMelody(){
+  for (int thisNote = 0; thisNote < 8; thisNote++) {//센서 초기화 알림음 
+    int noteDuration = 1000 / noteDurations[thisNote];
+    tone(BUZ_PIN, melody[thisNote], noteDuration);
+
+    int pauseBetweenNotes = noteDuration * 1.30;
+    delay(pauseBetweenNotes);
+    noTone(BUZ_PIN);
+  }
 }
