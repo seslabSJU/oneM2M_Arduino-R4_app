@@ -10,10 +10,10 @@
 
 ## Prepartion
 
-1. Arduino IDE(at least 1.8.x over) install
-2. In Arduino IDE, side bar menu -> boards manager
-3. enter Arduino Uno R4 WiFi and install board manager
-4. clone this project or download
+1. Install Arduino IDE(at least 1.8.x over)
+2. Go to side bar menu and click boards manager in Arduino IDE
+3. Type Arduino Uno R4 WiFi in search bar and install board manager
+4. Clone this project or download
 
 ## How to execute
 
