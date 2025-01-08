@@ -258,10 +258,12 @@ int post(String path, String contentType, String name, String content){
   }
 }
 
+/* Serialize JsonDocument Object to String and returns it */
 String serializeJsonBody(String contentType, String name, String content){
   String body;
   JsonDocument doc;
 
+  // Constructs JsonDocument 
   if(contentType.equals("AE")){
     JsonObject m2m_ae = doc["m2m:ae"].to<JsonObject>();
     m2m_ae["rn"] = name;
@@ -287,6 +289,7 @@ String serializeJsonBody(String contentType, String name, String content){
   return body;
 }
 
+/* Convert unsigned int to String */
 String unsignedToString(unsigned int value) {
     String result;
     do {
@@ -314,8 +317,9 @@ void printWifiStatus() {
   Serial.println(F(" dBm"));
 }
 
+/* Play Sound notes */
 void startMelody(){
-  for (int thisNote = 0; thisNote < 8; thisNote++) {//센서 초기화 알림음 
+  for (int thisNote = 0; thisNote < 8; thisNote++) {
     int noteDuration = 1000 / noteDurations[thisNote];
     tone(BUZ_PIN, melody[thisNote], noteDuration);
 
