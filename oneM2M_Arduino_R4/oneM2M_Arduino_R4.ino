@@ -10,7 +10,7 @@
 #define ARDUINOJSON_USE_DOUBLE 0
 #define ARDUINOJSON_USE_LONG_LONG 0
 #define LED_PIN 8
-#define PIR_PIN 13
+#define PIR_PIN 4
 #define BUZ_PIN 6
 
 char ssid[] = SECRET_SSID;  // your network SSID (name)
