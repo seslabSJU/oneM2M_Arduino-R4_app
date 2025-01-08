@@ -1,6 +1,5 @@
 #include <WiFiS3.h>
 #include <ArduinoJson.h>
-#include <assert.h>
 
 #include "arduino_secrets.h"
 #include "pitches.h"
