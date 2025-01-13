@@ -47,7 +47,7 @@
 <img src="./img/ArduinoIDE.jpg">
 
 ## User Guide
-- **First, Create arduino_secrets.h and define SSID and PASSWORD**
+- **First, define SSID and PASSWORD with your own network name(SSID) and password in arduino_secrets.h**
 
 ```c
 #define SECRET_SSID "..."
