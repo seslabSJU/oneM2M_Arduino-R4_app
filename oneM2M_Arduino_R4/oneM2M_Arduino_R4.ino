@@ -19,7 +19,7 @@ int keyIndex = 0;           // your network key index number (needed only for WE
 
 const char *server = "Your_ipv4_Address";  // your pc ip address
 const int port = 3000;
-int status = WL_IDLE_STATUS;
+int loopCount = 0;
 
 int melody[] = {
   NOTE_C4, NOTE_G3, NOTE_G3, NOTE_A3, NOTE_G3, 0, NOTE_B3, NOTE_C4
@@ -48,13 +48,15 @@ void setup() {
     while (true);
   }
   // Attempt to connect to WiFi network:
-  while (status != WL_CONNECTED) {
-    Serial.print(F("Attempting to connect to SSID: "));
-    Serial.println(ssid);
-    // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
-    status = WiFi.begin(ssid, pass);
+  Serial.print(F("Attempting to connect to SSID: "));
+  Serial.println(ssid);
+  // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
+  WiFi.begin(ssid, pass);
+  do {
+    if(loopCount >= 5) break;
     delay(10000);
-  }
+    loopCount++;
+  } while (WiFi.status() != WL_CONNECTED);
 
   // Print Current WiFi State
   printWifiStatus();
@@ -301,6 +303,11 @@ String unsignedToString(unsigned int value) {
 
 /* Print Wifi Connection Status */
 void printWifiStatus() {
+  if(WiFi.status() != WL_CONNECTED){
+    Serial.println(F("Wifi not connected!"));
+    return;
+  }
+
   // print the SSID of the network you're attached to:
   Serial.print(F("SSID: "));
   Serial.println(WiFi.SSID());
