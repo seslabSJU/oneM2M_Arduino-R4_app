@@ -22,6 +22,12 @@
 3. **Tools > Port** select USB port  
 4. Click upload button
 
+## Port-Forwarding Configuration
+- **Set up port forwarding with the listen address to global(0.0.0.0) and the port number 3000**
+```c
+netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=3000
+```
+
 ## Code Configurations
 - **Network Configuration**: Attempt to connect wifi according to the WiFi SSID, Password entered
 - **Sensor Configuration**: PIR sensor resets itself for 60 seconds
