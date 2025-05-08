@@ -23,9 +23,9 @@
 4. Click upload button
 
 ## Port-Forwarding Configuration
-- **Set up port forwarding with the listen address to global(0.0.0.0) and the port number 3000**
+- **Set up port forwarding with the listen address to global(0.0.0.0) and the port number 3000, the connect address to TinyIoT(127.0.0.1) and the port number 3000**
 ```c
-netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=3000
+netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=3000 connectaddress=127.0.0.1 connectport=3000
 ```
 
 ## Code Configurations
