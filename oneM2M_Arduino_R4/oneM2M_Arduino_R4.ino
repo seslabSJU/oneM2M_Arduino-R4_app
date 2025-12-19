@@ -4,7 +4,6 @@
 #include "arduino_secrets.h"
 #include "pitches.h"
 
-// C++ code
 #define ARDUINOJSON_SLOT_ID_SIZE 1
 #define ARDUINOJSON_STRING_LENGTH_SIZE 1
 #define ARDUINOJSON_USE_DOUBLE 0
@@ -13,11 +12,14 @@
 #define PIR_PIN 4
 #define BUZ_PIN 6
 
+char apikey[] = API_KEY;
+char lecture[] = LECTURE;
+char creator[] = CREATOR;
 char ssid[] = SECRET_SSID;  // your network SSID (name)
 char pass[] = SECRET_PASS;  // your network password (use for WPA, or use as key for WEP)
 int keyIndex = 0;           // your network key index number (needed only for WEP)
 
-const char *server = "Your_ipv4_Address";  // your pc ip address
+const char *server = "https://onem2m.iotcoss.ac.kr";  // lms
 const int port = 3000;
 int status = WL_IDLE_STATUS;
 int loopCount = 0;
@@ -149,17 +151,16 @@ void setDevice(){
 /* Get Request(AE, CNT, CIN) */
 int get(String path) {
   // HTTP Request Header
-  String request = "GET " + path + " HTTP/1.1\r\n";
-  request += "Host: ";
-  request += server;
-  request += ":";
-  request += port;
-  request += "\r\n";
-  request += "X-M2M-RI: retrieve\r\n";
-  request += "X-M2M-Rvi: 2a\r\n";
-  request += "X-M2M-Origin: CAdmin\r\n";
-  request += "Accept: application/json\r\n";
-  request += "Connection: close\r\n\r\n";
+  String request = "GET " + path + " HTTP/1.1\r\n"
+                   "Host: " + String(server) + ":" + String(port) + "\r\n"
+                   "X-M2M-RI: retrieve\r\n"
+                   "X-M2M-Rvi: 2a\r\n"
+                   "X-M2M-Origin: CAdmin\r\n"
+                   "X-API-KEY: " + String(apikey) + "\r\n"
+                   "X-AUTH-CUSTOM-LECTURE: " + String(lecture) + "\r\n"
+                   "X-AUTH-CUSTOM-CREATOR: " + String(creator) + "\r\n"
+                   "Accept: application/json\r\n"
+                   "Connection: close\r\n\r\n";
 
   // Print Request Log
   // Serial.println(F("---- HTTP REQUEST START ----"));
@@ -198,16 +199,15 @@ int get(String path) {
 /* Post Request Method(AE, CNT, CIN) */
 int post(String path, String contentType, String name, String content){
   // HTTP Request Header
-  String request = "POST " + path + " HTTP/1.1\r\n";
-  request += "Host: ";
-  request += server;
-  request += ":";
-  request += port;
-  request += "\r\n";
-  request += "X-M2M-RI: create\r\n";
-  request += "X-M2M-Rvi: 2a\r\n";
-  request += "X-M2M-Origin: SArduino\r\n";
-  
+  String request = "POST " + path + " HTTP/1.1\r\n"
+                   "Host: " + String(server) + ":" + String(port) + "\r\n"
+                   "X-M2M-RI: create\r\n"
+                   "X-M2M-Rvi: 2a\r\n"
+                   "X-M2M-Origin: SArduino\r\n"
+                   "X-API-KEY: " + String(apikey) + "\r\n"
+                   "X-AUTH-CUSTOM-LECTURE: " + String(lecture) + "\r\n"
+                   "X-AUTH-CUSTOM-CREATOR: " + String(creator) + "\r\n";
+
   if(contentType.equals("AE")){
     request += "Content-Type: application/json;ty=2\r\n";
   } else if(contentType.equals("CNT")){
@@ -215,16 +215,16 @@ int post(String path, String contentType, String name, String content){
   } else if(contentType.equals("CIN")){
     request += "Content-Type: application/json;ty=4\r\n";
   } else{
-    Serial.println(F("Unvalid Content Type!")); 
+    Serial.println(F("Unvalid Content Type!"));
     return 0;
   }
-  
+
   // Serialize Json Body
   String body = serializeJsonBody(contentType, name, content);
 
-  request += "Content-Length: " + unsignedToString(body.length())  + "\r\n";
-  request += "Accept: application/json\r\n";
-  request += "Connection: close\r\n\r\n";
+  request += "Content-Length: " + unsignedToString(body.length()) + "\r\n"
+             "Accept: application/json\r\n"
+             "Connection: close\r\n\r\n";
   
 
   // Print Request Log
