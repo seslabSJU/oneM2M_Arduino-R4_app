@@ -1,4 +1,5 @@
 #include <WiFiS3.h>
+#include <WiFiSSLClient.h>
 #include <ArduinoJson.h>
 
 #include "arduino_secrets.h"
@@ -12,12 +13,12 @@
 #define PIR_PIN 4
 #define BUZ_PIN 6
 
-static const char *HOST = "onem2m.iotcoss.ac.kr";  // lms
+static const char *HOST = "onem2m.iotcoss.ac.kr";  
 static const int PORT = 443;
-static const char* ONEM2M_ORIGIN = "SOrigin_25110182";
+static const char* ONEM2M_ORIGIN = "SOrigin_12341234_test";
 static const char* RVI = "2a";
-static const char* CSEBASE = "/tinyIoT";
-static const char* AE_RN  = "R4";         
+static const char* CSEBASE = "/Mobius";
+static const char* AE_RN  = "R4_TUTORIAL";         
 static const char* PIR_CNT = "pir";    
 static const char* LED_CNT = "led";
 static const char* BUZ_CNT = "buz";
@@ -34,11 +35,14 @@ int noteDurations[] = {
 };
 
 WiFiSSLClient wifi;
-
+bool ready = false;
 bool pirState = false;                   // PIR 상태
 bool isToneOn = false;
 unsigned long motionStartTime = 0;       //PIR이 처음 HIGH가 된 시간
 unsigned long thresholdDuration = 2500;  //2.5초(필요시 변경)
+uint32_t reqSeq = 1;                     // RI 생성용 시퀀스
+unsigned long lastTick = 0;              // 마지막 실행 시간
+static const unsigned long PERIOD_MS = 5000;  // 5초 간격
 
 void setup() {
   //Initialize serial and wait for port to open:
@@ -48,18 +52,13 @@ void setup() {
   // check for the WiFi module:
   if (WiFi.status() == WL_NO_MODULE) {
     Serial.println("Communication with WiFi module failed!\r\nPlease reset your device!");
-    // don't continue
-    while (true);
+
+    while (true) delay(1000);
   }
   // Attempt to connect to WiFi network:
-  while (status != WL_CONNECTED) {
-    if(loopCount > 5) break;
-    Serial.print("Attempting to connect to WPA SSID: ");
-    Serial.println(SECRET_SSID);
-    // Connect to WPA/WPA2 network:
-    status = WiFi.begin(SECRET_SSID, SECRET_PASS);
-    // wait 10 seconds for connection:
-    delay(10000); loopCount++;
+  if (!ensureWifiConnected(30000)) {
+    Serial.println("[FATAL] WiFi connect failed.");
+    while (true) delay(1000);
   }
 
   // Print Current WiFi State
@@ -72,12 +71,48 @@ void setup() {
   // Set LED off
   digitalWrite(LED_PIN, LOW);
 
-  // Procedure Stack
-  setDevice();
+  // Check CB first
+  Serial.println("\n[STEP] GET CB (CSEBase) ...");
+  int sc = get(String(CSEBASE));
+  Serial.print("[CB] HTTP status = ");
+  Serial.println(sc);
+
+  if (sc == 200 || sc == 201) {
+    // Procedure Stack
+    setDevice();
+  } else {
+    Serial.println("[WARN] CB not reachable. Setup failed.");
+    ready = false;
+  }
 }
 
 void loop() {
   int pirVal = digitalRead(PIR_PIN);
+  unsigned long now = millis();
+
+  // WiFi drop handling
+  if (WiFi.status() != WL_CONNECTED) {
+    ready = false;
+    Serial.println("[WiFi] Disconnected. Reconnecting...");
+    ensureWifiConnected(30000);
+    printWifiStatus();
+  }
+
+  if (now - lastTick < PERIOD_MS) return;
+  lastTick = now;
+
+  // If not ready, retry CB + setDevice
+  if (!ready) {
+    Serial.println("\n[RETRY] GET CB (CSEBase) ...");
+    int sc = get(String(CSEBASE));
+    Serial.print("[CB] HTTP status = ");
+    Serial.println(sc);
+
+    if (sc == 200 || sc == 201) {
+      setDevice();
+    }
+    return;
+  }
 
   // Activates when pir sensor detects something
   if (pirVal == HIGH && pirState == false) {
@@ -117,204 +152,276 @@ void loop() {
   }
 }
 
+/* Ensure WiFi Connected */
+static bool ensureWifiConnected(unsigned long maxWaitMs) {
+  if (WiFi.status() == WL_CONNECTED) return true;
+
+  Serial.print("[WiFi] Connecting to SSID: ");
+  Serial.println(SECRET_SSID);
+
+  WiFi.begin(SECRET_SSID, SECRET_PASS);
+
+  unsigned long start = millis();
+  while (millis() - start < maxWaitMs) {
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("[WiFi] Connected.");
+      return true;
+    }
+    delay(250);
+    Serial.print(".");
+  }
+  Serial.println();
+  return (WiFi.status() == WL_CONNECTED);
+}
+
 /* Set Device */
 void setDevice(){
   Serial.println("Setup Started!");
+  
   startMelody();
 
-  /* Check Arduino AE exists in tinyIoT if not create Arduino AE, CNT */
   String aePath = String(CSEBASE) + "/" + AE_RN;
-  int status = get(aePath);
-  if(status == 1) {
-    Serial.println("Successfully retrieved!");
-  } else if(status == 0){
-    Serial.println("Not Found... Creating AE");
 
-    int state = post(CSEBASE, "AE", AE_RN, "");
-    if(state == 1){
-      Serial.println("Successfully created AE");
-      post(aePath, "CNT", PIR_CNT, "") == 1 ? Serial.println("Successfully created CNT_pir!") : Serial.println("Failed to create CNT!");
-      post(aePath, "CNT", LED_CNT, "") == 1 ? Serial.println("Successfully created CNT_led") : Serial.println("Failed to create CNT!");
-      post(aePath, "CNT", BUZ_CNT, "") == 1 ? Serial.println("Successfully created CNT_buz") : Serial.println("Failed to create CNT!");
-    } else if(state == 0){
-      Serial.println("Invalid Header or URI");
+  // Check if AE exists
+  int aeSc = get(aePath);
+
+  if (aeSc == 404 || aeSc == 403) {
+    Serial.println("[setDevice] AE not found -> create AE");
+    int cr = post(CSEBASE, "AE", AE_RN, "");
+
+    if (cr == 201 || cr == 200 || cr == 409) {
+      Serial.println("[setDevice] AE created/exists");
+
+      // Create CNTs
+      int pirSc = post(aePath, "CNT", PIR_CNT, "");
+      pirSc == 201 || pirSc == 200 || pirSc == 409 ? Serial.println("[setDevice] CNT_pir OK") : Serial.println("[setDevice] CNT_pir FAILED");
+
+      int ledSc = post(aePath, "CNT", LED_CNT, "");
+      ledSc == 201 || ledSc == 200 || ledSc == 409 ? Serial.println("[setDevice] CNT_led OK") : Serial.println("[setDevice] CNT_led FAILED");
+
+      int buzSc = post(aePath, "CNT", BUZ_CNT, "");
+      buzSc == 201 || buzSc == 200 || buzSc == 409 ? Serial.println("[setDevice] CNT_buz OK") : Serial.println("[setDevice] CNT_buz FAILED");
+
+      ready = true;  // CNT 생성 완료, ready 설정
     } else {
-      Serial.println("Server connection failed!");
+      Serial.println("[setDevice] AE create failed");
+      ready = false;
+      return;
     }
-  } else{
-    Serial.println("Server connection failed!");
+  } else if (aeSc == 200 || aeSc == 201) {
+    Serial.println("[setDevice] AE exists");
+    ready = true;  // AE 존재 확인, ready 설정
+  } else {
+    Serial.println("[setDevice] AE check failed");
+    ready = false;
+    return;
   }
-  delay(60000);
 
   startMelody();
   Serial.println("Setup completed!");
 }
 
+/* Generate unique RI */
+String nextRI() {
+  String ri = "r4-";
+  ri += String(reqSeq++);
+  return ri;
+}
+
+/* Read HTTP status line */
+int readHttpStatusLine() {
+  String line = wifi.readStringUntil('\n');
+  line.trim();
+
+  if (!line.startsWith("HTTP/")) return -1;
+
+  int sp1 = line.indexOf(' ');
+  if (sp1 < 0) return -1;
+  int sp2 = line.indexOf(' ', sp1 + 1);
+  if (sp2 < 0) sp2 = line.length();
+
+  String codeStr = line.substring(sp1 + 1, sp2);
+  return codeStr.toInt();
+}
+
+/* Read X-M2M-RSC from headers */
+int readXM2MRSCFromHeaders() {
+  int rsc = -1;
+
+  while (wifi.connected()) {
+    String line = wifi.readStringUntil('\n');
+    if (line == "\r" || line.length() == 0) break;
+
+    if (line.startsWith("X-M2M-RSC:") || line.startsWith("x-m2m-rsc:")) {
+      int colon = line.indexOf(':');
+      if (colon >= 0) {
+        String v = line.substring(colon + 1);
+        v.trim();
+        rsc = v.toInt();
+      }
+    }
+  }
+  return rsc;
+}
+
+/* Drain body briefly */
+void drainBodyBrief(size_t maxBytes) {
+  size_t printed = 0;
+  while (wifi.available() && printed < maxBytes) {
+    char c = (char)wifi.read();
+    Serial.print(c);
+    printed++;
+  }
+  if (wifi.available()) {
+    Serial.println("\n[Body truncated]");
+    while (wifi.available()) (void)wifi.read();
+  } else {
+    Serial.println();
+  }
+}
+
 /* Get Request(AE, CNT, CIN) */
 int get(String path) {
-  // Send Request with headers
-  if (wifi.connect(HOST, PORT)) {
-    Serial.println("Connected to HOST");
-    // Send HTTP request line by line
-    wifi.println("GET " + path + " HTTP/1.1");
-    wifi.println("Host: " + String(HOST));
-    wifi.println("X-M2M-Origin: " + String(ONEM2M_ORIGIN));
-    wifi.println("X-M2M-RI: retrieve");
-    wifi.println("X-M2M-RVI: 2a");
-    wifi.println("X-API-KEY: " + String(API_KEY));
-    wifi.println("X-AUTH-CUSTOM-LECTURE: " + String(LECTURE));
-    wifi.println("X-AUTH-CUSTOM-CREATOR: " + String(CREATOR));
-    wifi.println("Accept: application/json");
-    wifi.println("Connection: close");
-    wifi.println();
-
-    Serial.println(("✓ Request sent"));
-
-    int status = -1;
-    Serial.println(("Reading response..."));
-    Serial.print(("Connection state: "));
-    Serial.println(wifi.connected() ? "CONNECTED" : "DISCONNECTED");
-    Serial.print(("Bytes available: "));
-    Serial.println(wifi.available());
-
-    // Get Response
-    while (wifi.connected()) {
-      while (wifi.available()) {
-        String line = wifi.readStringUntil('\n');
-        Serial.print(("< "));
-        Serial.println(line);
-        if(line.startsWith("HTTP/1.1") || line.startsWith("HTTP/2")){
-          status = line.substring(9,12).toInt();
-          Serial.print(("Status Code: "));
-          Serial.println(status);
-        }
-        delay(100);
-      }
-      wifi.stop();
-    }
-
-    Serial.print("Final Status: ");
-    Serial.println(status);
-
-    if(status == 200 || status == 201){
-      Serial.println(("✓ Success!"));
-      Serial.println(("========== GET REQUEST END ==========\n"));
-      return 1;
-    } else {
-      Serial.println(("✗ Failed!"));
-      Serial.println(("========== GET REQUEST END ==========\n"));
-      return 0;
-    }
-  } else {
-    Serial.println(("✗ Connection to HOST failed"));
-    Serial.println(("========== GET REQUEST END ==========\n"));
+  if (!wifi.connect(HOST, PORT)) {
+    Serial.println("[ERROR] TLS connect failed");
+    wifi.stop();
     return -1;
   }
+
+  String ri = nextRI();
+
+  // Send HTTP request
+  wifi.println("GET " + path + " HTTP/1.1");
+  wifi.println("Host: " + String(HOST));
+  wifi.println("X-M2M-Origin: " + String(ONEM2M_ORIGIN));
+  wifi.println("X-M2M-RI: " + ri);
+  wifi.println("X-M2M-RVI: " + String(RVI));
+  wifi.println("X-API-KEY: " + String(API_KEY));
+  wifi.println("X-AUTH-CUSTOM-LECTURE: " + String(LECTURE));
+  wifi.println("X-AUTH-CUSTOM-CREATOR: " + String(CREATOR));
+  wifi.println("Accept: application/json");
+  wifi.println("Connection: close");
+  wifi.println();
+
+  // Wait for response
+  unsigned long t0 = millis();
+  while (!wifi.available()) {
+    if (millis() - t0 > 8000) {
+      Serial.println("[ERROR] Response timeout (GET)");
+      wifi.stop();
+      return -1;
+    }
+    delay(10);
+  }
+
+  int httpStatus = readHttpStatusLine();
+  int rsc = readXM2MRSCFromHeaders();
+
+  Serial.print("[GET] HTTP=");
+  Serial.print(httpStatus);
+  if (rsc > 0) {
+    Serial.print("  X-M2M-RSC=");
+    Serial.print(rsc);
+  }
+  Serial.println();
+
+  drainBodyBrief(500);
+
+  wifi.stop();
+  return httpStatus;
 }
 
 /* Post Request Method(AE, CNT, CIN) */
 int post(String path, String contentType, String name, String content){
-  // Send Request with headers and body
-  Serial.println(("Attempting to connect..."));
-  if (wifi.connect(HOST, PORT)) {
-    Serial.println(("✓ Connected to HOST"));
-
-    // Send HTTP request line by line
-    wifi.println("POST " + path + " HTTP/1.1");
-    wifi.println("Host: " + String(HOST));
-    wifi.println("X-M2M-RI: create");
-    wifi.println("X-M2M-RVI: 2a");
-    wifi.println("X-M2M-Origin: " + String(ONEM2M_ORIGIN));
-    wifi.println("X-API-KEY: " + String(API_KEY));
-    wifi.println("X-AUTH-CUSTOM-LECTURE: " + String(LECTURE));
-    wifi.println("X-AUTH-CUSTOM-CREATOR: " + String(CREATOR));
-
-    if(contentType.equals("AE")){
-      wifi.println("Content-Type: application/json;ty=2");
-    } else if(contentType.equals("CNT")){
-      wifi.println("Content-Type: application/json;ty=3");
-    } else if(contentType.equals("CIN")){
-      wifi.println("Content-Type: application/json;ty=4");
-    }
-
-    wifi.println("Content-Length: " + unsignedToString(body.length()));
-    wifi.println("Accept: application/json");
-    wifi.println("Connection: close");
-    wifi.println();
-    wifi.print(body);
-
-    Serial.println(("✓ Request sent"));
-
-    int status = -1;
-    Serial.println(("Reading response..."));
-    Serial.print(("Connection state: "));
-    Serial.println(wifi.connected() ? "CONNECTED" : "DISCONNECTED");
-    Serial.print(("Bytes available: "));
-    Serial.println(wifi.available());
-
-    // Get Response
-    while (wifi.connected()) {
-      while (wifi.available()) {
-        String line = wifi.readStringUntil('\n');
-        Serial.print(("< "));
-        Serial.println(line);
-        if(line.startsWith("HTTP/1.1") || line.startsWith("HTTP/2")){
-          status = line.substring(9,12).toInt();
-          Serial.print(("Status Code: "));
-          Serial.println(status);
-        }
-        delay(100);
-      }
-      wifi.stop();
-    }
-
-    Serial.print(("Final Status: "));
-    Serial.println(status);
-
-    if(status == 200 || status == 201){
-      Serial.println("✓ Success!");
-      Serial.println("========== POST REQUEST END ==========\n");
-      return 1;
-    } else {
-      Serial.println("✗ Failed!"));
-      Serial.println("========== POST REQUEST END ==========\n");
-      return 0;
-    }
-  } else {
-    Serial.println("✗ Connection to HOST failed");
-    Serial.println("========== POST REQUEST END ==========\n");
+  if (!wifi.connect(HOST, PORT)) {
+    Serial.println("[ERROR] TLS connect failed");
+    wifi.stop();
     return -1;
   }
+
+  String ri = nextRI();
+  String body = serializeJsonBody(contentType, name, content);
+
+  // Send HTTP request
+  wifi.println("POST " + path + " HTTP/1.1");
+  wifi.println("Host: " + String(HOST));
+  wifi.println("X-M2M-Origin: " + String(ONEM2M_ORIGIN));
+  wifi.println("X-M2M-RI: " + ri);
+  wifi.println("X-M2M-RVI: " + String(RVI));
+  wifi.println("X-API-KEY: " + String(API_KEY));
+  wifi.println("X-AUTH-CUSTOM-LECTURE: " + String(LECTURE));
+  wifi.println("X-AUTH-CUSTOM-CREATOR: " + String(CREATOR));
+
+  if(contentType.equals("AE")){
+    wifi.println("Content-Type: application/json;ty=2");
+  } else if(contentType.equals("CNT")){
+    wifi.println("Content-Type: application/json;ty=3");
+  } else if(contentType.equals("CIN")){
+    wifi.println("Content-Type: application/json;ty=4");
+  } else {
+    Serial.println("[ERROR] Invalid content type");
+    wifi.stop();
+    return -1;
+  }
+
+  wifi.println("Content-Length: " + String(body.length()));
+  wifi.println("Accept: application/json");
+  wifi.println("Connection: close");
+  wifi.println();
+  wifi.print(body);
+
+  // Wait for response
+  unsigned long t0 = millis();
+  while (!wifi.available()) {
+    if (millis() - t0 > 8000) {
+      Serial.println("[ERROR] Response timeout (POST)");
+      wifi.stop();
+      return -1;
+    }
+    delay(10);
+  }
+
+  int httpStatus = readHttpStatusLine();
+  int rsc = readXM2MRSCFromHeaders();
+
+  Serial.print("[POST ");
+  Serial.print(contentType);
+  Serial.print("] HTTP=");
+  Serial.print(httpStatus);
+  if (rsc > 0) {
+    Serial.print("  X-M2M-RSC=");
+    Serial.print(rsc);
+  }
+  Serial.println();
+
+  drainBodyBrief(500);
+
+  wifi.stop();
+  return httpStatus;
 }
 
 /* Serialize JsonDocument Object to String and returns it */
 String serializeJsonBody(String contentType, String name, String content){
   String body;
-  JsonDocument doc;
+  StaticJsonDocument<512> doc;
 
-  // Constructs JsonDocument 
   if(contentType.equals("AE")){
-    JsonObject m2m_ae = doc["m2m:ae"].to<JsonObject>();
+    JsonObject m2m_ae = doc.createNestedObject("m2m:ae");
     m2m_ae["rn"] = name;
     m2m_ae["api"] = "NArduino";
-    JsonArray lbl = m2m_ae["lbl"].to<JsonArray>();
-    lbl.add("ae_"+name);
-    m2m_ae["srv"][0] = "3";
     m2m_ae["rr"] = true;
+    JsonArray srv = m2m_ae.createNestedArray("srv");
+    srv.add(RVI);
   } else if(contentType.equals("CNT")){
-    JsonObject m2m_cnt = doc["m2m:cnt"].to<JsonObject>();
+    JsonObject m2m_cnt = doc.createNestedObject("m2m:cnt");
     m2m_cnt["rn"] = name;
-    JsonArray lbl = m2m_cnt["lbl"].to<JsonArray>();
-    lbl.add("cnt_"+name);
     m2m_cnt["mbs"] = 16384;
   } else if(contentType.equals("CIN")){
-    JsonObject m2m_cin = doc["m2m:cin"].to<JsonObject>();
+    JsonObject m2m_cin = doc.createNestedObject("m2m:cin");
     m2m_cin["con"] = content;
   }
-  
-  doc.shrinkToFit();
-  serializeJson(doc, body);
 
+  serializeJson(doc, body);
   return body;
 }
 
