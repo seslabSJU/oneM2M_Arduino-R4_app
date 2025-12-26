@@ -1,9 +1,11 @@
 #include <WiFiS3.h>
 #include <WiFiSSLClient.h>
 #include <ArduinoJson.h>
+#include <Arduino_LED_Matrix.h>
 
 #include "arduino_secrets.h"
 #include "pitches.h"
+#include "led_patterns.h"
 
 #define ARDUINOJSON_SLOT_ID_SIZE 1
 #define ARDUINOJSON_STRING_LENGTH_SIZE 1
@@ -35,6 +37,8 @@ int noteDurations[] = {
 };
 
 WiFiSSLClient wifi;
+ArduinoLEDMatrix matrix;
+
 bool ready = false;
 bool pirState = false;                   // PIR 상태
 bool isToneOn = false;
@@ -44,10 +48,32 @@ uint32_t reqSeq = 1;                     // RI 생성용 시퀀스
 unsigned long lastTick = 0;              // 마지막 실행 시간
 static const unsigned long PERIOD_MS = 5000;  // 5초 간격
 
+/* Update LED Matrix based on current state */
+void updateLEDMatrix() {
+  // 우선순위: WiFi 연결 > oneM2M Ready > PIR 센서 상태
+
+  if (WiFi.status() != WL_CONNECTED) {
+    // 1. WiFi 연결 안됨 -> "W" 표시
+    matrix.renderBitmap(PATTERN_WIFI_CONNECTING, 8, 12);
+  } else if (!ready) {
+    // 2. WiFi 연결됨, oneM2M 준비 안됨 -> 체크마크 표시
+    matrix.renderBitmap(PATTERN_WIFI_CONNECTED, 8, 12);
+  } else if (pirState) {
+    // 3. 모든 준비 완료, PIR 센서 감지 -> 느낌표(!) 표시
+    matrix.renderBitmap(PATTERN_PIR_DETECTED, 8, 12);
+  } else {
+    // 4. 모든 준비 완료, PIR 대기 중 -> 빈 화면 (모든 LED 꺼짐)
+    matrix.renderBitmap(PATTERN_PIR_IDLE, 8, 12);
+  }
+}
+
 void setup() {
   //Initialize serial and wait for port to open:
   Serial.begin(115200);
   while (!Serial);
+
+  // Initialize LED Matrix
+  matrix.begin();
 
   // check for the WiFi module:
   if (WiFi.status() == WL_NO_MODULE) {
@@ -63,6 +89,7 @@ void setup() {
 
   // Print Current WiFi State
   printWifiStatus();
+  updateLEDMatrix();  // Update LED after WiFi connected
 
   pinMode(LED_PIN, OUTPUT);
   pinMode(BUZ_PIN, OUTPUT);
@@ -84,6 +111,7 @@ void setup() {
     Serial.println("[WARN] CB not reachable. Setup failed.");
     ready = false;
   }
+  updateLEDMatrix();  // Update LED after setup complete
 }
 
 void loop() {
@@ -94,8 +122,10 @@ void loop() {
   if (WiFi.status() != WL_CONNECTED) {
     ready = false;
     Serial.println("[WiFi] Disconnected. Reconnecting...");
+    updateLEDMatrix();  // Show WiFi disconnected
     ensureWifiConnected(30000);
     printWifiStatus();
+    updateLEDMatrix();  // Update after reconnection
   }
 
   if (now - lastTick < PERIOD_MS) return;
@@ -110,6 +140,7 @@ void loop() {
 
     if (sc == 200 || sc == 201) {
       setDevice();
+      updateLEDMatrix();  // Update after setDevice
     }
     return;
   }
@@ -119,6 +150,7 @@ void loop() {
     pirState = true;
     motionStartTime = millis();  // Records time when pir sensor detected
     Serial.println("PIR detected HIGH");
+    updateLEDMatrix();  // Update LED for PIR detection
   }
 
   // Activates when pir sensor detects nothing
@@ -127,6 +159,7 @@ void loop() {
     isToneOn = false;
     Serial.println("PIR returned to LOW");
     digitalWrite(LED_PIN, LOW);
+    updateLEDMatrix();  // Update LED when PIR returns to LOW
 
     // Send Changed State to tinyIoT
     post(String(CSEBASE) + "/" + AE_RN + "/" + PIR_CNT, "CIN", "", "0");
