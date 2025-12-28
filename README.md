@@ -4,7 +4,7 @@
 
 ### 주요 사양
 
-![image](https://docs.arduino.cc/static/16cbbb52c1bd49edecf62ab3fe8d1d2e/image.svg)
+<img src="https://docs.arduino.cc/static/16cbbb52c1bd49edecf62ab3fe8d1d2e/image.svg" width="500" />
 
 - **메인 프로세서**: 32-bit ARM Cortex-M4 (RA4M1, Renesas) - 48MHz
 - **무선 모듈**: ESP32-S3 (WiFi 및 Bluetooth 5.0 지원)
