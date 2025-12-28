@@ -1,67 +1,39 @@
 #include <WiFiS3.h>
 #include <WiFiSSLClient.h>
 #include <ArduinoJson.h>
+#include <DHT.h>
 #include <Arduino_LED_Matrix.h>
 
-#include "arduino_secrets.h"
-#include "pitches.h"
-#include "led_patterns.h"
+#include "secrets.h"
+#include "digit_patterns.h"
 
 #define ARDUINOJSON_SLOT_ID_SIZE 1
 #define ARDUINOJSON_STRING_LENGTH_SIZE 1
 #define ARDUINOJSON_USE_DOUBLE 0
 #define ARDUINOJSON_USE_LONG_LONG 0
-#define LED_PIN 8
-#define PIR_PIN 4
-#define BUZ_PIN 6
 
-static const char *HOST = "onem2m.iotcoss.ac.kr";  
+#define DHTPIN 2        // DHT11 데이터 핀 (디지털 2번)
+#define DHTTYPE DHT11
+
+static const int DELAY = 10000;
 static const int PORT = 443;
-static const char* ONEM2M_ORIGIN = "SOrigin_12341234_test";
+static const char *HOST = "onem2m.iotcoss.ac.kr";  
+static const char* ONEM2M_ORIGIN = "SOrigin_12341234_t1";
 static const char* RVI = "2a";
 static const char* CSEBASE = "/Mobius";
-static const char* AE_RN  = "R4_TUTORIAL";         
-static const char* TEM_CNT = "pir";    
-static const char* HUM_CNT = "led";
-static const char* BUZ_CNT = "buz";
+static const char* AE_RN  = "R4_TUTO";         
+static const char* TEM_CNT = "TEM";    
+static const char* HUM_CNT = "HUM";
 
 int status = WL_IDLE_STATUS;
 int loopCount = 0;
+bool ready = false;
+uint32_t reqSeq = 1;                     // RI 생성용 시퀀스
 
-int melody[] = {
-  NOTE_C4, NOTE_G3, NOTE_G3, NOTE_A3, NOTE_G3, 0, NOTE_B3, NOTE_C4
-};
-
-int noteDurations[] = {
-  4, 8, 8, 4, 4, 4, 4, 4
-};
-
+DHT dht(DHTPIN, DHTTYPE);
 WiFiSSLClient wifi;
 ArduinoLEDMatrix matrix;
 
-bool ready = false;
-bool pirState = false;                   // PIR 상태
-uint32_t reqSeq = 1;                     // RI 생성용 시퀀스
-static const unsigned long DEBOUNCE_DELAY = 10000;  
-
-/* Update LED Matrix based on current state */
-void updateLEDMatrix() {
-  // 우선순위: WiFi 연결 > oneM2M Ready > PIR 센서 상태
-
-  if (WiFi.status() != WL_CONNECTED) {
-    // 1. WiFi 연결 안됨 -> "W" 표시
-    matrix.renderBitmap(PATTERN_WIFI_CONNECTING, 8, 12);
-  } else if (!ready) {
-    // 2. WiFi 연결됨, oneM2M 준비 안됨 -> 체크마크 표시
-    matrix.renderBitmap(PATTERN_WIFI_CONNECTED, 8, 12);
-  } else if (pirState) {
-    // 3. 모든 준비 완료, PIR 센서 감지 -> 느낌표(!) 표시
-    matrix.renderBitmap(PATTERN_PIR_DETECTED, 8, 12);
-  } else {
-    // 4. 모든 준비 완료, PIR 대기 중 -> 빈 화면 (모든 LED 꺼짐)
-    matrix.renderBitmap(PATTERN_PIR_IDLE, 8, 12);
-  }
-}
 
 void setup() {
   //Initialize serial and wait for port to open:
@@ -70,11 +42,11 @@ void setup() {
 
   // Initialize LED Matrix
   matrix.begin();
+  dht.begin();  // DHT11 센서 초기화
 
   // check for the WiFi module:
   if (WiFi.status() == WL_NO_MODULE) {
     Serial.println("Communication with WiFi module failed!\r\nPlease reset your device!");
-
     while (true) delay(1000);
   }
   // Attempt to connect to WiFi network:
@@ -83,45 +55,22 @@ void setup() {
     while (true) delay(1000);
   }
 
-  // Print Current WiFi State
-  printWifiStatus();
-  updateLEDMatrix();  // Update LED after WiFi connected
+  // WiFi 연결 후 네트워크 스택 안정화 대기
+  delay(5000);
 
-  pinMode(LED_PIN, OUTPUT);
-  pinMode(BUZ_PIN, OUTPUT);
-  pinMode(PIR_PIN, INPUT);
-
-  // Set LED off
-  digitalWrite(LED_PIN, LOW);
-
-  // Check CB first
-  Serial.println("\n[STEP] GET CB (CSEBase) ...");
-  int sc = get(String(CSEBASE));
-  Serial.print("[CB] HTTP status = ");
-  Serial.println(sc);
-
-  if (sc == 200 || sc == 201) {
-    // Procedure Stack
-    setDevice();
-  } else {
-    Serial.println("[WARN] CB not reachable. Setup failed.");
-    ready = false;
-  }
-  updateLEDMatrix();  // Update LED after setup complete
+  Serial.println("\n[SETUP] Complete. Entering loop...");
 }
 
 void loop() {
-  int pirVal = digitalRead(PIR_PIN);
   unsigned long now = millis();
 
   // WiFi drop handling
   if (WiFi.status() != WL_CONNECTED) {
     ready = false;
     Serial.println("[WiFi] Disconnected. Reconnecting...");
-    updateLEDMatrix();
+
     ensureWifiConnected(30000);
     printWifiStatus();
-    updateLEDMatrix();
   }
 
   // If not ready, retry CB + setDevice
@@ -133,57 +82,92 @@ void loop() {
 
     if (sc == 200 || sc == 201) {
       setDevice();
-      updateLEDMatrix();
     }
     delay(5000);  // 5초 대기 후 재시도
     return;
   }
 
-  // PIR LOW → HIGH transition (동작 감지)
-  if (pirVal == HIGH && pirState == false) {
-    pirState = true;
-    Serial.println("[PIR] Motion DETECTED (HIGH)");
+  float temperature = dht.readTemperature();  // 온도 (°C)
+  float humidity = dht.readHumidity();        // 습도 (%)
 
-    // 1. LED 즉시 켜기
-    digitalWrite(LED_PIN, HIGH);
-
-    // 2. 부저 즉시 울리기
-    tone(BUZ_PIN, 262, 200);
-
-    // 3. LED 매트릭스 업데이트
-    updateLEDMatrix();
-
-    // 4. oneM2M 서버로 데이터 전송
-    Serial.println("[POST] Sending HIGH state to server...");
-    post(String(CSEBASE) + "/" + AE_RN + "/" + TEM_CNT, "CIN", "", "1");
-    post(String(CSEBASE) + "/" + AE_RN + "/" + HUM_CNT, "CIN", "", "1");
-    post(String(CSEBASE) + "/" + AE_RN + "/" + BUZ_CNT, "CIN", "", "1");
-
-    // 5. 2.5초 디바운스 대기
-    delay(DEBOUNCE_DELAY);
+  if (isnan(humidity) || isnan(temperature)) {  // 읽기 실패 체크
+    Serial.println("[ERROR] DHT11 센서 읽기 실패!");
+    delay(2000);
+    return;
   }
 
-  // PIR HIGH → LOW transition (동작 없음)
-  if (pirVal == LOW && pirState == true) {
-    pirState = false;
-    Serial.println("[PIR] Motion ENDED (LOW)");
+  Serial.println("----------------------");
+  Serial.print("TEM: ");
+  Serial.print(temperature);
+  Serial.println(" °C");
 
-    // 1. LED 즉시 끄기
-    digitalWrite(LED_PIN, LOW);
+  Serial.print("HUM: ");
+  Serial.print(humidity);
+  Serial.println(" %");
+  Serial.println("----------------------");
 
-    // 2. LED 매트릭스 업데이트
-    updateLEDMatrix();
+  // LED 매트릭스에 온습도 표시
+  displayTemperatureHumidity((int)temperature, (int)humidity);
 
-    // 3. oneM2M 서버로 데이터 전송
-    Serial.println("[POST] Sending LOW state to server...");
-    post(String(CSEBASE) + "/" + AE_RN + "/" + TEM_CNT, "CIN", "", "0");
-    post(String(CSEBASE) + "/" + AE_RN + "/" + HUM_CNT, "CIN", "", "0");
-    post(String(CSEBASE) + "/" + AE_RN + "/" + BUZ_CNT, "CIN", "", "0");
+  Serial.println("[POST] Sending state to server...");
+  post(String(CSEBASE) + "/" + AE_RN + "/" + TEM_CNT, "CIN", "", String(temperature));
+  post(String(CSEBASE) + "/" + AE_RN + "/" + HUM_CNT, "CIN", "", String(humidity));
 
-    // 4. 2.5초 디바운스 대기
-    delay(DEBOUNCE_DELAY);
+  delay(DELAY);
+
+}
+
+
+// 프레임 초기화 함수
+void clear_frame(byte frame[8][12]) {
+  for (int i = 0; i < 8; i++) {
+    for (int j = 0; j < 12; j++) {
+      frame[i][j] = 0;
+    }
   }
 }
+
+// 숫자 패턴을 프레임의 특정 위치에 복사
+void add_digit_to_frame(byte frame[8][12], int index, int x, int y) {
+  // digit_fonts[index]를 byte[3][5] 형태로 캐스팅
+  byte (*digit_pattern)[5] = (byte(*)[5])digit_fonts[index];
+
+  // 3행 × 5열 패턴을 그대로 복사
+  for (int row = 0; row < 3; row++) {
+    for (int col = 0; col < 5; col++) {
+      frame[x + row][y + col] = digit_pattern[row][col];
+    }
+  }
+}
+
+// 전역 프레임 버퍼
+byte frame[8][12];
+
+// 온도와 습도를 LED 매트릭스에 표시
+void displayTemperatureHumidity(int temp, int humid) {
+  clear_frame(frame);
+
+  // 온도 십의 자리, 일의 자리 계산
+  int tempTens = temp / 10;
+  int tempOnes = temp % 10;
+
+  // 습도 십의 자리, 일의 자리 계산
+  int humidTens = humid / 10;
+  int humidOnes = humid % 10;
+
+  // ★ 참조 프로젝트 방식: 인덱스와 x, y 좌표만 전달
+  // 온도 (왼쪽 절반: y=0~5)
+  add_digit_to_frame(frame, tempTens, 5, 0);   // x=5 (아래쪽), y=0
+  add_digit_to_frame(frame, tempOnes, 1, 0);   // x=1 (위쪽), y=0
+
+  // 습도 (오른쪽 절반: y=6~11)
+  add_digit_to_frame(frame, humidTens, 5, 6);  // x=5 (아래쪽), y=6
+  add_digit_to_frame(frame, humidOnes, 1, 6);  // x=1 (위쪽), y=6
+
+  matrix.renderBitmap(frame, 8, 12);
+}
+
+
 
 /* Ensure WiFi Connected */
 static bool ensureWifiConnected(unsigned long maxWaitMs) {
@@ -210,32 +194,18 @@ static bool ensureWifiConnected(unsigned long maxWaitMs) {
 /* Set Device */
 void setDevice(){
   Serial.println("Setup Started!");
-  
-  startMelody();
 
   String aePath = String(CSEBASE) + "/" + AE_RN;
+  String temPath = aePath + "/" + TEM_CNT;
+  String humPath = aePath + "/" + HUM_CNT;
 
-  // Check if AE exists
+  // 1. AE 확인 -> 없으면 생성
   int aeSc = get(aePath);
-
   if (aeSc == 404 || aeSc == 403) {
-    Serial.println("[setDevice] AE not found -> create AE");
+    Serial.println("[setDevice] AE not found -> creating...");
     int cr = post(CSEBASE, "AE", AE_RN, "");
-
-    if (cr == 201 || cr == 200 || cr == 409) {
-      Serial.println("[setDevice] AE created/exists");
-
-      // Create CNTs
-      int pirSc = post(aePath, "CNT", TEM_CNT, "");
-      pirSc == 201 || pirSc == 200 || pirSc == 409 ? Serial.println("[setDevice] CNT_pir OK") : Serial.println("[setDevice] CNT_pir FAILED");
-
-      int ledSc = post(aePath, "CNT", HUM_CNT, "");
-      ledSc == 201 || ledSc == 200 || ledSc == 409 ? Serial.println("[setDevice] CNT_led OK") : Serial.println("[setDevice] CNT_led FAILED");
-
-      int buzSc = post(aePath, "CNT", BUZ_CNT, "");
-      buzSc == 201 || buzSc == 200 || buzSc == 409 ? Serial.println("[setDevice] CNT_buz OK") : Serial.println("[setDevice] CNT_buz FAILED");
-
-      ready = true;  // CNT 생성 완료, ready 설정
+    if (cr == 201 || cr == 200) {
+      Serial.println("[setDevice] AE created");
     } else {
       Serial.println("[setDevice] AE create failed");
       ready = false;
@@ -243,14 +213,41 @@ void setDevice(){
     }
   } else if (aeSc == 200 || aeSc == 201) {
     Serial.println("[setDevice] AE exists");
-    ready = true;  // AE 존재 확인, ready 설정
   } else {
     Serial.println("[setDevice] AE check failed");
     ready = false;
     return;
   }
 
-  startMelody();
+  // 2. TEM CNT 확인 -> 없으면 생성
+  int temSc = get(temPath);
+  if (temSc == 404 || temSc == 403) {
+    Serial.println("[setDevice] TEM CNT not found -> creating...");
+    int cr = post(aePath, "CNT", TEM_CNT, "");
+    if (cr == 201 || cr == 200) {
+      Serial.println("[setDevice] TEM CNT created");
+    } else {
+      Serial.println("[setDevice] TEM CNT create failed");
+    }
+  } else if (temSc == 200 || temSc == 201) {
+    Serial.println("[setDevice] TEM CNT exists");
+  }
+
+  // 3. HUM CNT 확인 -> 없으면 생성
+  int humSc = get(humPath);
+  if (humSc == 404 || humSc == 403) {
+    Serial.println("[setDevice] HUM CNT not found -> creating...");
+    int cr = post(aePath, "CNT", HUM_CNT, "");
+    if (cr == 201 || cr == 200) {
+      Serial.println("[setDevice] HUM CNT created");
+    } else {
+      Serial.println("[setDevice] HUM CNT create failed");
+    }
+  } else if (humSc == 200 || humSc == 201) {
+    Serial.println("[setDevice] HUM CNT exists");
+  }
+
+  ready = true;
   Serial.println("Setup completed!");
 }
 
@@ -277,44 +274,10 @@ int readHttpStatusLine() {
   return codeStr.toInt();
 }
 
-/* Read X-M2M-RSC from headers */
-int readXM2MRSCFromHeaders() {
-  int rsc = -1;
-
-  while (wifi.connected()) {
-    String line = wifi.readStringUntil('\n');
-    if (line == "\r" || line.length() == 0) break;
-
-    if (line.startsWith("X-M2M-RSC:") || line.startsWith("x-m2m-rsc:")) {
-      int colon = line.indexOf(':');
-      if (colon >= 0) {
-        String v = line.substring(colon + 1);
-        v.trim();
-        rsc = v.toInt();
-      }
-    }
-  }
-  return rsc;
-}
-
-/* Drain body briefly */
-void drainBodyBrief(size_t maxBytes) {
-  size_t printed = 0;
-  while (wifi.available() && printed < maxBytes) {
-    char c = (char)wifi.read();
-    Serial.print(c);
-    printed++;
-  }
-  if (wifi.available()) {
-    Serial.println("\n[Body truncated]");
-    while (wifi.available()) (void)wifi.read();
-  } else {
-    Serial.println();
-  }
-}
 
 /* Get Request(AE, CNT, CIN) */
 int get(String path) {
+  Serial.println("----------------------");
   if (!wifi.connect(HOST, PORT)) {
     Serial.println("[ERROR] TLS connect failed");
     wifi.stop();
@@ -348,25 +311,27 @@ int get(String path) {
   }
 
   int httpStatus = readHttpStatusLine();
-  int rsc = readXM2MRSCFromHeaders();
 
   Serial.print("[GET] HTTP=");
-  Serial.print(httpStatus);
-  if (rsc > 0) {
-    Serial.print("  X-M2M-RSC=");
-    Serial.print(rsc);
-  }
-  Serial.println();
+  Serial.println(httpStatus);
 
-  drainBodyBrief(500);
+  // 나머지 응답 출력 (헤더 + 본문)
+  if (wifi.available()) {
+    while (wifi.available()) {
+      Serial.write(wifi.read());
+    }
+    Serial.println();
+  }
 
   wifi.stop();
+  Serial.println("----------------------");
   return httpStatus;
 }
 
 /* Post Request Method(AE, CNT, CIN) */
 int post(String path, String contentType, String name, String content){
-  if (!wifi.connect(HOST, PORT)) {
+  Serial.println("----------------------");
+    if (!wifi.connect(HOST, PORT)) {
     Serial.println("[ERROR] TLS connect failed");
     wifi.stop();
     return -1;
@@ -415,21 +380,22 @@ int post(String path, String contentType, String name, String content){
   }
 
   int httpStatus = readHttpStatusLine();
-  int rsc = readXM2MRSCFromHeaders();
 
   Serial.print("[POST ");
   Serial.print(contentType);
   Serial.print("] HTTP=");
-  Serial.print(httpStatus);
-  if (rsc > 0) {
-    Serial.print("  X-M2M-RSC=");
-    Serial.print(rsc);
-  }
-  Serial.println();
+  Serial.println(httpStatus);
 
-  drainBodyBrief(500);
+  // 나머지 응답 출력 (헤더 + 본문)
+  if (wifi.available()) {
+    while (wifi.available()) {
+      Serial.write(wifi.read());
+    }
+    Serial.println();
+  }
 
   wifi.stop();
+  Serial.println("----------------------");
   return httpStatus;
 }
 
@@ -491,14 +457,3 @@ void printWifiStatus() {
   Serial.println(" dBm");
 }
 
-/* Play Sound notes */
-void startMelody(){
-  for (int thisNote = 0; thisNote < 8; thisNote++) {
-    int noteDuration = 1000 / noteDurations[thisNote];
-    tone(BUZ_PIN, melody[thisNote], noteDuration);
-
-    int pauseBetweenNotes = noteDuration * 1.30;
-    delay(pauseBetweenNotes);
-    noTone(BUZ_PIN);
-  }
-}
