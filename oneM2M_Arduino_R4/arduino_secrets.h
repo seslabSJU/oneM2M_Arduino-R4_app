@@ -1,5 +1,0 @@
-#define SECRET_SSID "seslab"
-#define SECRET_PASS "sejong703"
-#define API_KEY "cSmZL7dEM1ZuYkcM8VdqSMNk22zUwrIV"
-#define LECTURE "LCT_20250002"
-#define CREATOR "sju12341234"

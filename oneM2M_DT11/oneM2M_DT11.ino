@@ -25,31 +25,29 @@ static const char* AE_RN  = "R4_TUTO";
 static const char* TEM_CNT = "TEM";    
 static const char* HUM_CNT = "HUM";
 
-int status = WL_IDLE_STATUS;
-int loopCount = 0;
 bool ready = false;
-uint32_t reqSeq = 1;                     // RI 생성용 시퀀스
+uint32_t reqSeq = 1;  // RI 생성용 시퀀스
+byte frame[8][12];  // 전역 프레임 버퍼
 
 DHT dht(DHTPIN, DHTTYPE);
 WiFiSSLClient wifi;
 ArduinoLEDMatrix matrix;
 
-
 void setup() {
-  //Initialize serial and wait for port to open:
+  // 시리얼 초기화 및 포트 오픈 대기
   Serial.begin(115200);
   while (!Serial);
 
-  // Initialize LED Matrix
+  // LED 매트릭스 초기화
   matrix.begin();
   dht.begin();  // DHT11 센서 초기화
 
-  // check for the WiFi module:
+  // WiFi 모듈 체크
   if (WiFi.status() == WL_NO_MODULE) {
     Serial.println("Communication with WiFi module failed!\r\nPlease reset your device!");
     while (true) delay(1000);
   }
-  // Attempt to connect to WiFi network:
+  // WiFi 네트워크 연결 시도
   if (!ensureWifiConnected(30000)) {
     Serial.println("[FATAL] WiFi connect failed.");
     while (true) delay(1000);
@@ -62,9 +60,7 @@ void setup() {
 }
 
 void loop() {
-  unsigned long now = millis();
-
-  // WiFi drop handling
+  // WiFi 연결 끊김 처리
   if (WiFi.status() != WL_CONNECTED) {
     ready = false;
     Serial.println("[WiFi] Disconnected. Reconnecting...");
@@ -73,9 +69,9 @@ void loop() {
     printWifiStatus();
   }
 
-  // If not ready, retry CB + setDevice
+  // 준비되지 않았으면 CB 확인 및 setDevice 재시도
   if (!ready) {
-    Serial.println("\n[RETRY] GET CB (CSEBase) ...");
+    Serial.println("\n[TRY] GET CB (CSEBase) ...");
     int sc = get(String(CSEBASE));
     Serial.print("[CB] HTTP status = ");
     Serial.println(sc);
@@ -91,7 +87,7 @@ void loop() {
   float humidity = dht.readHumidity();        // 습도 (%)
 
   if (isnan(humidity) || isnan(temperature)) {  // 읽기 실패 체크
-    Serial.println("[ERROR] DHT11 센서 읽기 실패!");
+    Serial.println("[ERROR] DHT11 ERROR");
     delay(2000);
     return;
   }
@@ -114,9 +110,7 @@ void loop() {
   post(String(CSEBASE) + "/" + AE_RN + "/" + HUM_CNT, "CIN", "", String(humidity));
 
   delay(DELAY);
-
 }
-
 
 // 프레임 초기화 함수
 void clear_frame(byte frame[8][12]) {
@@ -140,9 +134,6 @@ void add_digit_to_frame(byte frame[8][12], int index, int x, int y) {
   }
 }
 
-// 전역 프레임 버퍼
-byte frame[8][12];
-
 // 온도와 습도를 LED 매트릭스에 표시
 void displayTemperatureHumidity(int temp, int humid) {
   clear_frame(frame);
@@ -155,7 +146,6 @@ void displayTemperatureHumidity(int temp, int humid) {
   int humidTens = humid / 10;
   int humidOnes = humid % 10;
 
-  // ★ 참조 프로젝트 방식: 인덱스와 x, y 좌표만 전달
   // 온도 (왼쪽 절반: y=0~5)
   add_digit_to_frame(frame, tempTens, 5, 0);   // x=5 (아래쪽), y=0
   add_digit_to_frame(frame, tempOnes, 1, 0);   // x=1 (위쪽), y=0
@@ -167,9 +157,7 @@ void displayTemperatureHumidity(int temp, int humid) {
   matrix.renderBitmap(frame, 8, 12);
 }
 
-
-
-/* Ensure WiFi Connected */
+/* WiFi 연결 시도 */
 static bool ensureWifiConnected(unsigned long maxWaitMs) {
   if (WiFi.status() == WL_CONNECTED) return true;
 
@@ -191,7 +179,7 @@ static bool ensureWifiConnected(unsigned long maxWaitMs) {
   return (WiFi.status() == WL_CONNECTED);
 }
 
-/* Set Device */
+/* 디바이스 설정 (AE, CNT 확인 및 생성) */
 void setDevice(){
   Serial.println("Setup Started!");
 
@@ -251,14 +239,14 @@ void setDevice(){
   Serial.println("Setup completed!");
 }
 
-/* Generate unique RI */
+/* 고유 RI 생성 */
 String nextRI() {
   String ri = "r4-";
   ri += String(reqSeq++);
   return ri;
 }
 
-/* Read HTTP status line */
+/* HTTP 상태 라인 읽기 */
 int readHttpStatusLine() {
   String line = wifi.readStringUntil('\n');
   line.trim();
@@ -274,8 +262,7 @@ int readHttpStatusLine() {
   return codeStr.toInt();
 }
 
-
-/* Get Request(AE, CNT, CIN) */
+/* GET 요청 (AE, CNT, CIN) */
 int get(String path) {
   Serial.println("----------------------");
   if (!wifi.connect(HOST, PORT)) {
@@ -286,7 +273,7 @@ int get(String path) {
 
   String ri = nextRI();
 
-  // Send HTTP request
+  // HTTP 요청 전송
   wifi.println("GET " + path + " HTTP/1.1");
   wifi.println("Host: " + String(HOST));
   wifi.println("X-M2M-Origin: " + String(ONEM2M_ORIGIN));
@@ -299,7 +286,7 @@ int get(String path) {
   wifi.println("Connection: close");
   wifi.println();
 
-  // Wait for response
+  // 응답 대기
   unsigned long t0 = millis();
   while (!wifi.available()) {
     if (millis() - t0 > 8000) {
@@ -328,10 +315,10 @@ int get(String path) {
   return httpStatus;
 }
 
-/* Post Request Method(AE, CNT, CIN) */
+/* POST 요청 (AE, CNT, CIN) */
 int post(String path, String contentType, String name, String content){
   Serial.println("----------------------");
-    if (!wifi.connect(HOST, PORT)) {
+  if (!wifi.connect(HOST, PORT)) {
     Serial.println("[ERROR] TLS connect failed");
     wifi.stop();
     return -1;
@@ -340,7 +327,7 @@ int post(String path, String contentType, String name, String content){
   String ri = nextRI();
   String body = serializeJsonBody(contentType, name, content);
 
-  // Send HTTP request
+  // HTTP 요청 전송
   wifi.println("POST " + path + " HTTP/1.1");
   wifi.println("Host: " + String(HOST));
   wifi.println("X-M2M-Origin: " + String(ONEM2M_ORIGIN));
@@ -368,7 +355,7 @@ int post(String path, String contentType, String name, String content){
   wifi.println();
   wifi.print(body);
 
-  // Wait for response
+  // 응답 대기
   unsigned long t0 = millis();
   while (!wifi.available()) {
     if (millis() - t0 > 8000) {
@@ -399,7 +386,7 @@ int post(String path, String contentType, String name, String content){
   return httpStatus;
 }
 
-/* Serialize JsonDocument Object to String and returns it */
+/* JSON 본문 직렬화 */
 String serializeJsonBody(String contentType, String name, String content){
   String body;
   StaticJsonDocument<512> doc;
@@ -424,36 +411,25 @@ String serializeJsonBody(String contentType, String name, String content){
   return body;
 }
 
-/* Convert unsigned int to String */
-String unsignedToString(unsigned int value) {
-    String result;
-    do {
-        result = char('0' + (value % 10)) + result;
-        value /= 10;
-    } while (value > 0);
-    return result;
-}
-
-/* Print Wifi Connection Status */
+/* WiFi 연결 상태 출력 */
 void printWifiStatus() {
   if(WiFi.status() != WL_CONNECTED){
     Serial.println("Wifi not connected!");
     return;
   }
 
-  // print the SSID of the network you're attached to:
+  // 연결된 네트워크의 SSID 출력
   Serial.print("SSID: ");
   Serial.println(WiFi.SSID());
 
-  // print your board's IP address:
+  // 보드의 IP 주소 출력
   IPAddress ip = WiFi.localIP();
   Serial.print("IP Address: ");
   Serial.println(ip);
 
-  // print the received signal strength:
+  // 수신 신호 강도 출력
   long rssi = WiFi.RSSI();
   Serial.print("signal strength (RSSI):");
   Serial.print(rssi);
   Serial.println(" dBm");
 }
-
