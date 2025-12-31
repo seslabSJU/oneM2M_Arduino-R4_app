@@ -1,14 +1,20 @@
 #include <DHT.h>
 #include <Arduino_LED_Matrix.h>
-
+// 숫자 0~9 패턴 정의
 #include "digit_patterns.h"
 
 // DHT11 센서 설정
 #define DHTPIN 2        // DHT11 데이터 핀 (디지털 2번)
-#define DHTTYPE DHT11
+#define DHTTYPE DHT11   // 센서 타입
 
+// DHT11 센서 객체 생성
 DHT dht(DHTPIN, DHTTYPE);
+
+// LED 매트릭스 객체 생성
 ArduinoLEDMatrix matrix;
+
+// LED 매트릭스 프레임 버퍼 (8행 x 12열)
+byte frame[8][12];
 
 // 프레임 초기화 함수
 void clear_frame(byte frame[8][12]) {
