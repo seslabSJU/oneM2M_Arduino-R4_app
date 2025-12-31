@@ -4,34 +4,43 @@
 #include <DHT.h>
 #include <Arduino_LED_Matrix.h>
 
-#include "secrets.h"
-#include "digit_patterns.h"
+#include "secrets.h"          // WiFi 및 API 인증 정보
+#include "digit_patterns.h"   // 숫자 0~9 패턴 정의
 
-#define ARDUINOJSON_SLOT_ID_SIZE 1
-#define ARDUINOJSON_STRING_LENGTH_SIZE 1
-#define ARDUINOJSON_USE_DOUBLE 0
-#define ARDUINOJSON_USE_LONG_LONG 0
+// ArduinoJson 메모리 최적화 설정
+#define ARDUINOJSON_SLOT_ID_SIZE 1           // 슬롯 ID 크기 최소화
+#define ARDUINOJSON_STRING_LENGTH_SIZE 1     // 문자열 길이 크기 최소화
+#define ARDUINOJSON_USE_DOUBLE 0             // double 타입 비활성화 (메모리 절약)
+#define ARDUINOJSON_USE_LONG_LONG 0          // long long 타입 비활성화
 
+// DHT11 센서 설정
 #define DHTPIN 2        // DHT11 데이터 핀 (디지털 2번)
-#define DHTTYPE DHT11
+#define DHTTYPE DHT11   // 센서 타입
 
-static const int DELAY = 10000;
-static const int PORT = 443;
-static const char *HOST = "onem2m.iotcoss.ac.kr";  
-static const char* ONEM2M_ORIGIN = "SOrigin_12341234_t1";
-static const char* RVI = "2a";
-static const char* CSEBASE = "/Mobius";
-static const char* AE_RN  = "R4_TUTO";         
-static const char* TEM_CNT = "TEM";    
-static const char* HUM_CNT = "HUM";
+// 타이밍 및 네트워크 설정
+const int DELAY = 10000;              // 데이터 전송 주기 (10초)
+const int PORT = 443;                 // HTTPS 포트
+const char *HOST = "onem2m.iotcoss.ac.kr";  // oneM2M 서버 주소
 
-bool ready = false;
-uint32_t reqSeq = 1;  // RI 생성용 시퀀스
-byte frame[8][12];  // 전역 프레임 버퍼
+// oneM2M 인증 정보
+const char* ONEM2M_ORIGIN = "SOrigin_12341234_t1";// SOrigin_학번_임의값으로 설정
+const char* RVI = "2a";               // 릴리즈 버전
 
-DHT dht(DHTPIN, DHTTYPE);
-WiFiSSLClient wifi;
-ArduinoLEDMatrix matrix;
+// oneM2M 리소스 경로 설정
+const char* CSEBASE = "/Mobius";      // CSE Base 이름
+const char* AE_RN  = "R4_TUTO";       // Application Entity 이름
+const char* TEM_CNT = "TEM";          // 온도 Container 이름
+const char* HUM_CNT = "HUM";          // 습도 Container 이름
+
+// 전역 변수
+bool ready = false;                  // oneM2M 리소스 초기화 완료 여부
+uint32_t reqSeq = 1;                 // HTTP 요청 ID 생성용 시퀀스 번호
+byte frame[8][12];                   // LED 매트릭스 프레임 버퍼 (8행 x 12열)
+
+// 객체 생성
+DHT dht(DHTPIN, DHTTYPE);            // DHT11 센서 객체
+WiFiSSLClient wifi;                  // HTTPS 통신 클라이언트 객체
+ArduinoLEDMatrix matrix;             // LED 매트릭스 객체
 
 void setup() {
   // 시리얼 초기화 및 포트 오픈 대기
@@ -158,22 +167,25 @@ void displayTemperatureHumidity(int temp, int humid) {
 }
 
 /* WiFi 연결 시도 */
-static bool ensureWifiConnected(unsigned long maxWaitMs) {
+bool ensureWifiConnected(unsigned long maxWaitMs) {
+  // 이미 연결되어 있으면 즉시 반환
   if (WiFi.status() == WL_CONNECTED) return true;
 
   Serial.print("[WiFi] Connecting to SSID: ");
   Serial.println(SECRET_SSID);
 
+  // WiFi 연결 시작
   WiFi.begin(SECRET_SSID, SECRET_PASS);
 
+  // 최대 대기 시간까지 연결 시도
   unsigned long start = millis();
   while (millis() - start < maxWaitMs) {
     if (WiFi.status() == WL_CONNECTED) {
       Serial.println("[WiFi] Connected.");
       return true;
     }
-    delay(250);
-    Serial.print(".");
+    delay(250);  // 250ms 대기
+    Serial.print(".");  // 연결 시도 진행 표시
   }
   Serial.println();
   return (WiFi.status() == WL_CONNECTED);

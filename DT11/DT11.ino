@@ -50,7 +50,6 @@ void displayTemperatureHumidity(int temp, int humid) {
   int humidTens = humid / 10;
   int humidOnes = humid % 10;
 
-  // ★ 참조 프로젝트 방식: 인덱스와 x, y 좌표만 전달
   // 온도 (왼쪽 절반: y=0~5)
   add_digit_to_frame(frame, tempTens, 5, 0);   // x=5 (아래쪽), y=0
   add_digit_to_frame(frame, tempOnes, 1, 0);   // x=1 (위쪽), y=0
