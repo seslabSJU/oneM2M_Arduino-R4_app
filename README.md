@@ -4,7 +4,7 @@
 
 ### 주요 사양
 
-<img src="https://docs.arduino.cc/static/16cbbb52c1bd49edecf62ab3fe8d1d2e/image.svg" width="500" />
+<img src="https://store.arduino.cc/cdn/shop/files/ABX00087_00.front_643x483.jpg?v=1749566714" width="500" />
 
 - **메인 프로세서**: 32-bit ARM Cortex-M4 (RA4M1, Renesas) - 48MHz
 - **무선 모듈**: ESP32-S3 (WiFi 및 Bluetooth 5.0 지원)
@@ -26,6 +26,7 @@
 ## Arduino R4 WiFi 펌웨어 업데이트
 
 - 예제를 실행하기 위해서는 펌웨어 업데이트가 필요합니다.
+- 윈도우 환경에서 업데이트하는것을 권장합니다.
 
 1. **Arduino IDE 실행**
    - Arduino IDE를 최신 버전으로 업데이트합니다 (2.0 이상 권장)
@@ -41,16 +42,24 @@
    - Tools > Firmware Updater 선택
    - CHECK UPDATES -> 0.6.0 INSTALL
 
-## iotcoss사용법
+- [펌웨어 업데이트 실패시](https://forum.arduino.cc/t/arduino-uno-r4-wifi-recognized-as-esp32-devices/1177896/5)
+
+## oneM2M 플랫폼 iotcoss사용법
 
 [https://platform.iotcoss.ac.kr](https://platform.iotcoss.ac.kr)
 
-[학생 가이드](https://platform.iotcoss.ac.kr/guides/student-guide.pptx
+[iotcoss 학생 가이드](https://platform.iotcoss.ac.kr/guides/student-guide.pptx
 )
 ## 온습도센서 예제
 
-[DT11](DT11/README.md)
+[DT11 실습](DT11/README.md)
 
 ## oneM2M 온습도센서 예제
 
-[oneM2M_DT11](oneM2M_DT11/README.md)
+[oneM2M_DT11 실습](oneM2M_DT11/README.md)
+
+## 참고 사이트
+
+- ARDUINODOCS: [https://docs.arduino.cc/hardware/uno-r4-wifi/](https://docs.arduino.cc/hardware/) 
+
+- Arduino Project Hub: [https://projecthub.arduino.cc/](https://projecthub.arduino.cc/) 
