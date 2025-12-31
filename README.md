@@ -1,74 +1,65 @@
-# oneM2M_Arduino-R4_app
+# Arduino R4 WiFi oneM2M tutorial
 
-[oneM2M](https://www.onem2m.org/) based example of communication between the device and the oneM2M TinyIoT server on the same network using Arduino Uno R4 boards
+## Arduino R4 WiFi 소개
 
-## Overview
+### 주요 사양
 
-- **Key Feature**: Sensor data collection, data transmission between oneM2M TinyIoT server 
-- **Used Board**: Arduino Uno r4 WiFi
-- **Development Environment**: Arduino IDE
+<img src="https://store.arduino.cc/cdn/shop/files/ABX00087_00.front_643x483.jpg?v=1749566714" width="500" />
 
-## Prepartion
+- **메인 프로세서**: 32-bit ARM Cortex-M4 (RA4M1, Renesas) - 48MHz
+- **무선 모듈**: ESP32-S3 (WiFi 및 Bluetooth 5.0 지원)
+- **내장 LED 매트릭스**: 12x8 빨간색 LED (96개)
+- **메모리**: 256KB Flash, 32KB RAM
+- **동작 전압**: 5V
+- **디지털 I/O 핀**: 14개 (PWM 출력 6개)
+- **아날로그 입력 핀**: 6개 (14-bit ADC)
 
-1. Install Arduino IDE(at least 1.8.x over)
-2. Go to side bar menu and click boards manager in Arduino IDE
-3. Type Arduino Uno R4 WiFi in search bar and install board manager
-4. Clone this project or download
+### 특징
 
-## How to execute
+1. **WiFi 연결**: ESP32-S3 모듈을 통한 WiFi 및 Bluetooth 통신
+2. **LED 매트릭스**: 추가 부품 없이 간단한 그래픽, 애니메이션, 텍스트 표시 가능
+3. **강력한 성능**: 기존 UNO 대비 3배 이상 빠른 처리 속도
+4. **Arduino 호환**: 기존 Arduino 코드 및 라이브러리와 호환
 
-1. In Arduino IDE by `File > Open`, open `oneM2M_Arduino-R4_app/oneM2M_Arduino_R4.ino` 
-2. **Tools > Board** select `Arduino Uno R4 WiFi`  
-3. **Tools > Port** select USB port  
-4. Click upload button
+[추가 정보](https://docs.arduino.cc/hardware/uno-r4-wifi/)
 
-## Port-Forwarding Configuration
-- **Set up port forwarding with the listen address to global(0.0.0.0) and the port number 3000, the connect address to TinyIoT(127.0.0.1) and the port number 3000**
-```c
-netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=3000 connectaddress=127.0.0.1 connectport=3000
-```
+## Arduino R4 WiFi 펌웨어 업데이트
 
-## Code Configurations
-- **Network Configuration**: Attempt to connect wifi according to the WiFi SSID, Password entered
-- **Sensor Configuration**: PIR sensor resets itself for 60 seconds
-- **oneM2M Structure Setting**: If Arduino can not find its AE in tinyIoT server, the process of creating the AE and then creating the CNTs of each sensor below the AE will be executed
-- **Sensor Detection**: If the PIR detects movement for a certain period of time or longer, the LED and Buzzer operate
-- **Server Communication**: Send the sensor's value to the server when the PIR operates for a certain period of time or longer, when the LED and Buzzer operate, and when the detection of the PIR ends
+- 예제를 실행하기 위해서는 펌웨어 업데이트가 필요합니다.
+- 윈도우 환경에서 업데이트하는것을 권장합니다.
 
-## Libraries
+1. **Arduino IDE 실행**
+   - Arduino IDE를 최신 버전으로 업데이트합니다 (2.0 이상 권장)
 
-- **WiFiS3.h**: Nested Header file in Arduino Uno R4 Boards manager  
-- **arduino_secrets.h**: Header file that needs to be created by you. It contains SSID and PASSWORD of your own wifi network
-- **ArduinoJson**: Required for json parsing and creation
+2. **보드 연결**
+   - Arduino R4 WiFi를 USB 케이블로 PC에 연결합니다
 
-## Hardware
-- **Arduino Uno R4 WiFi**
-<img src="./img/ArduinoUnoR4.jpg">
+3. **보드 및 포트 선택**
+   - Tools > Board > Arduino UNO R4 WiFi 선택
+   - Tools > Port에서 연결된 포트 선택
 
-- **Circuit Configuration**
-<img src="./img/CircuitConfig.png">
+4. **펌웨어 업데이트 실행**
+   - Tools > Firmware Updater 선택
+   - CHECK UPDATES -> 0.6.0 INSTALL
 
-## Software
-- **Arduino IDE**
-<img src="./img/ArduinoIDE.jpg">
+- [펌웨어 업데이트 실패시](https://forum.arduino.cc/t/arduino-uno-r4-wifi-recognized-as-esp32-devices/1177896/5)
 
-## User Guide
-- **First, define SSID and PASSWORD with your own network name(SSID) and password in arduino_secrets.h**
+## oneM2M 플랫폼 iotcoss사용법
 
-```c
-#define SECRET_SSID "..."
-#define SECRET_PASS "..."
-```
-- **Second, Download latest "ArduinoJson" library using library manager in arduino IDE.**
+[https://platform.iotcoss.ac.kr](https://platform.iotcoss.ac.kr)
 
-<img src="./img/updatelibrary.png">
+[iotcoss 학생 가이드](https://platform.iotcoss.ac.kr/guides/student-guide.pptx
+)
+## 온습도센서 예제
 
-- **Third, set ip address of server using wireless lan adapter Wi-Fi ipv4 address of your pc.**
+[DT11 실습](DT11/README.md)
 
-<img src="./img/Show_Ip.jpg">
+## oneM2M 온습도센서 예제
 
-<img src="./img/WiFi_Address.jpg">
+[oneM2M_DT11 실습](oneM2M_DT11/README.md)
 
-```c
-const char *server = "Your_ipv4_Address";
-```
+## 참고 사이트
+
+- ARDUINODOCS: [https://docs.arduino.cc/hardware/uno-r4-wifi/](https://docs.arduino.cc/hardware/) 
+
+- Arduino Project Hub: [https://projecthub.arduino.cc/](https://projecthub.arduino.cc/) 
