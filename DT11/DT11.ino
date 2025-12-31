@@ -38,9 +38,6 @@ void add_digit_to_frame(byte frame[8][12], int index, int x, int y) {
   }
 }
 
-// 전역 프레임 버퍼
-byte frame[8][12];
-
 // 온도와 습도를 LED 매트릭스에 표시
 void displayTemperatureHumidity(int temp, int humid) {
   clear_frame(frame);
