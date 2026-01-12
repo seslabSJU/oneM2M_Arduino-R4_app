@@ -1,5 +1,0 @@
-#define SECRET_SSID "SSID"
-#define SECRET_PASS "PASS"
-#define API_KEY "API_KEY"
-#define LECTURE "LECTURE"
-#define CREATOR "CREATOR"
