@@ -11,7 +11,7 @@
 #define MQTT_PORT 11883                   // MQTT 브로커 포트번호
 
 // ==========================================
-// IoTcoss 개방형사물인터넷 플랫폼 연결 정보
+// IoTcoss 개방형사물인터넷 팀 플랫폼 연결 정보
 // ==========================================
 #define API_HOST "onem2m.iotcoss.ac.kr"   // 플랫폼 주소
 
@@ -22,5 +22,3 @@
 #define NOTY_SUB_TOPIC "/oneM2M/req/Mobius/" ORIGIN "/#"
 //  oneM2M Notification을 발생시킨 <sub> 리소스의 경로
 #define NOTY_SUB_RESOURCE "Mobius/ae_" CHALLENGE_TEAM "/temp/sub_temp"
-
-    

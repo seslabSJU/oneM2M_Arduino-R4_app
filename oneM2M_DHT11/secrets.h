@@ -1,8 +1,8 @@
 // ==========================================
 // WiFi 연결 정보
 // ==========================================
-#define SECRET_SSID "WiFi SSID"   // 와이파이 SSID
-#define SECRET_PASS "WiFi Pass"   // 와이파이 비밀번호
+#define SECRET_SSID "WiFi SSID"           // 와이파이 SSID
+#define SECRET_PASS "WiFi Pass"           // 와이파이 비밀번호
 
 // ==========================================
 // IoTcoss 개방형사물인터넷 플랫폼 개인 연결 정보
