@@ -50,13 +50,6 @@
 
 [iotcoss 학생 가이드](https://platform.iotcoss.ac.kr/guides/student-guide.pptx
 )
-## 온습도센서 예제
-
-[DT11 실습](DT11/README.md)
-
-## oneM2M 온습도센서 예제
-
-[oneM2M_DT11 실습](oneM2M_DT11/README.md)
 
 ## 참고 사이트
 
