@@ -4,8 +4,8 @@
 #include <DHT.h>
 #include <Arduino_LED_Matrix.h>
 
-#include "secrets.h"          // WiFi 및 API 인증 정보
-#include "digit_patterns.h"   // 숫자 0~9 패턴 정의
+#include "secrets.h"                 // WiFi 및 API 인증 정보
+#include "digit_patterns.h"          // 숫자 0~9 패턴 정의
 
 // ArduinoJson 메모리 최적화 설정
 #define ARDUINOJSON_SLOT_ID_SIZE 1           // 슬롯 ID 크기 최소화
@@ -14,33 +14,27 @@
 #define ARDUINOJSON_USE_LONG_LONG 0          // long long 타입 비활성화
 
 // DHT11 센서 설정
-#define DHTPIN 2        // DHT11 데이터 핀 (디지털 2번)
-#define DHTTYPE DHT11   // 센서 타입
+#define DHTPIN 2                      // DHT11 데이터 핀 (디지털 2번)
+#define DHTTYPE DHT11                 // 센서 타입
 
-// 타이밍 및 네트워크 설정
 const int DELAY = 10000;              // 데이터 전송 주기 (10초)
-const int PORT = 443;                 // HTTPS 포트
-const char *HOST = "onem2m.iotcoss.ac.kr";  // oneM2M 서버 주소
-
-// oneM2M 인증 정보
-const char* ONEM2M_ORIGIN = "SOrigin_12341234_t1";// SOrigin_학번_임의값으로 설정
-const char* RVI = "2a";               // 릴리즈 버전
+const char* RVI = "2a";               // oneM2M 릴리즈 버전
 
 // oneM2M 리소스 경로 설정
 const char* CSEBASE = "/Mobius";      // CSE Base 이름
-const char* AE_RN  = "R4_TUTO";       // Application Entity 이름
+const char* R4_AE  = "R4_TUTO";       // Application Entity 이름
 const char* TEM_CNT = "TEM";          // 온도 Container 이름
 const char* HUM_CNT = "HUM";          // 습도 Container 이름
 
 // 전역 변수
-bool ready = false;                  // oneM2M 리소스 초기화 완료 여부
-uint32_t reqSeq = 1;                 // HTTP 요청 ID 생성용 시퀀스 번호
-byte frame[8][12];                   // LED 매트릭스 프레임 버퍼 (8행 x 12열)
+bool ready = false;                   // oneM2M 리소스 초기화 완료 여부
+uint32_t reqSeq = 1;                  // HTTP 요청 ID 생성용 시퀀스 번호
+byte frame[8][12];                    // LED 매트릭스 프레임 버퍼 (8행 x 12열)
 
 // 객체 생성
-DHT dht(DHTPIN, DHTTYPE);            // DHT11 센서 객체
-WiFiSSLClient wifi;                  // HTTPS 통신 클라이언트 객체
-ArduinoLEDMatrix matrix;             // LED 매트릭스 객체
+DHT dht(DHTPIN, DHTTYPE);             // DHT11 센서 객체
+WiFiSSLClient wifi;                   // HTTPS 통신 클라이언트 객체
+ArduinoLEDMatrix matrix;              // LED 매트릭스 객체
 
 void setup() {
   // 시리얼 초기화 및 포트 오픈 대기
@@ -64,8 +58,7 @@ void setup() {
 
   // WiFi 연결 후 네트워크 스택 안정화 대기
   delay(5000);
-
-  Serial.println("\n[SETUP] Complete. Entering loop...");
+  Serial.println("[SETUP] Complete. Entering loop...");
 }
 
 void loop() {
@@ -73,14 +66,12 @@ void loop() {
   if (WiFi.status() != WL_CONNECTED) {
     ready = false;
     Serial.println("[WiFi] Disconnected. Reconnecting...");
-
-    ensureWifiConnected(30000);
-    printWifiStatus();
+    ensureWifiConnected(30000);  // WiFi 연결 시도
   }
 
   // 준비되지 않았으면 CB 확인 및 setDevice 재시도
   if (!ready) {
-    Serial.println("\n[TRY] GET CB (CSEBase) ...");
+    Serial.println("[TRY] GET CB (CSEBase) ...");
     int sc = get(String(CSEBASE));
     Serial.print("[CB] HTTP status = ");
     Serial.println(sc);
@@ -115,10 +106,332 @@ void loop() {
   displayTemperatureHumidity((int)temperature, (int)humidity);
 
   Serial.println("[POST] Sending state to server...");
-  post(String(CSEBASE) + "/" + AE_RN + "/" + TEM_CNT, "CIN", "", String(temperature));
-  post(String(CSEBASE) + "/" + AE_RN + "/" + HUM_CNT, "CIN", "", String(humidity));
+  postCIN(String(CSEBASE) + "/" + R4_AE + "/" + TEM_CNT, String(temperature));
+  postCIN(String(CSEBASE) + "/" + R4_AE + "/" + HUM_CNT, String(humidity));
 
   delay(DELAY);
+}
+
+// WiFi 연결 시도
+bool ensureWifiConnected(unsigned long maxWaitMs) {
+  // 이미 연결되어 있으면 즉시 반환
+  if (WiFi.status() == WL_CONNECTED) return true;
+
+  Serial.print("[WiFi] Connecting to SSID: ");
+  Serial.println(SECRET_SSID);
+
+  // WiFi 연결 시작
+  WiFi.begin(SECRET_SSID, SECRET_PASS);
+
+  // 최대 대기 시간까지 연결 시도
+  unsigned long start = millis();
+  while (millis() - start < maxWaitMs) {
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("[WiFi] Connected.");
+
+      // WiFi 연결 정보 출력
+      Serial.print("SSID: ");
+      Serial.println(WiFi.SSID());
+
+      IPAddress ip = WiFi.localIP();
+      Serial.print("IP Address: ");
+      Serial.println(ip);
+
+      long rssi = WiFi.RSSI();
+      Serial.print("signal strength (RSSI):");
+      Serial.print(rssi);
+      Serial.println(" dBm");
+
+      return true;
+    }
+    delay(250);  // 250ms 대기
+    Serial.print(".");  // 연결 시도 진행 표시
+  }
+  Serial.println();
+  return (WiFi.status() == WL_CONNECTED);
+}
+
+// 고유 RI 생성 (예: "r4-1", "r4-2", "r4-3" ...)
+String nextRI() {
+  String ri = "r4-";
+  ri += String(reqSeq++);
+  return ri;
+}
+
+// HTTP 응답에서 상태 코드 추출 (예: "HTTP/1.1 200 OK" → 200)
+int readHttpStatusLine() {
+  String line = wifi.readStringUntil('\n');
+  line.trim();
+
+  if (!line.startsWith("HTTP/")) return -1;
+
+  int sp1 = line.indexOf(' ');
+  if (sp1 < 0) return -1;
+  int sp2 = line.indexOf(' ', sp1 + 1);
+  if (sp2 < 0) sp2 = line.length();
+
+  String codeStr = line.substring(sp1 + 1, sp2);
+  return codeStr.toInt();
+}
+
+// GET 요청 (리소스 조회)
+int get(String path) {
+  Serial.println("----------------------");
+  if (!wifi.connect(API_HOST, HTTPS_PORT)) {
+    Serial.println("[ERROR] TLS connect failed");
+    wifi.stop();
+    return -1;
+  }
+
+  String ri = nextRI();
+
+  // HTTP 요청 전송
+  wifi.println("GET " + path + " HTTP/1.1");
+  wifi.println("Host: " + String(API_HOST));
+  wifi.println("X-M2M-Origin: " + String(ORIGIN));
+  wifi.println("X-M2M-RI: " + ri);
+  wifi.println("X-M2M-RVI: " + String(RVI));
+  wifi.println("X-API-KEY: " + String(API_KEY));
+  wifi.println("X-AUTH-CUSTOM-LECTURE: " + String(LECTURE));
+  wifi.println("X-AUTH-CUSTOM-CREATOR: " + String(CREATOR));
+  wifi.println("Accept: application/json");
+  wifi.println("Connection: close");
+  wifi.println();
+
+  // 응답 대기
+  unsigned long t0 = millis();
+  while (!wifi.available()) {
+    if (millis() - t0 > DELAY) {
+      Serial.println("[ERROR] Response timeout (GET)");
+      wifi.stop();
+      return -1;
+    }
+    delay(10);
+  }
+
+  int httpStatus = readHttpStatusLine();
+
+  Serial.print("[GET] HTTP=");
+  Serial.println(httpStatus);
+
+  // 나머지 응답 출력 (헤더 + 본문)
+  if (wifi.available()) {
+    while (wifi.available()) {
+      Serial.write(wifi.read());
+    }
+    Serial.println();
+  }
+
+  wifi.stop();
+  Serial.println("----------------------");
+  return httpStatus;
+}
+
+// AE 생성 요청 
+int postAE(String path, String resourceName){
+  String body = serializeAE(resourceName);  // AE용 JSON 본문 직렬화
+  return post(path, "AE", 2, body);         // ty=2 (AE 타입)
+}
+
+// CNT 생성 요청
+int postCNT(String path, String resourceName){
+  String body = serializeCNT(resourceName);  // CNT용 JSON 본문 직렬화
+  return post(path, "CNT", 3, body);         // ty=3 (CNT 타입)
+}
+
+// CIN 생성 요청 (데이터 전송)
+int postCIN(String path, String content){
+  String body = serializeCIN(content);       // CIN용 JSON 본문 직렬화
+  return post(path, "CIN", 4, body);         // ty=4 (CIN 타입)
+}
+
+// AE용 JSON 본문 직렬화
+String serializeAE(String resourceName){
+  String body;
+  StaticJsonDocument<512> doc;  // JSON 문서 생성 (최대 512바이트)
+
+  // m2m:ae 객체 생성
+  JsonObject m2m_ae = doc.createNestedObject("m2m:ae");
+  m2m_ae["rn"] = resourceName;      // 리소스 이름 (Resource Name)
+  m2m_ae["api"] = "NArduino";       // App ID
+  m2m_ae["rr"] = true;              // Request Reachability (요청 도달 가능 여부)
+
+  // srv 배열 생성 및 RVI 추가
+  JsonArray srv = m2m_ae.createNestedArray("srv");
+  srv.add(RVI);  // 지원하는 릴리즈 버전 추가
+
+  serializeJson(doc, body);  // JSON 객체를 문자열로 변환
+  return body;
+  /* 생성되는 JSON 예시:
+   * {
+   *   "m2m:ae": {
+   *     "rn": "R4_TUTO",
+   *     "api": "NArduino",
+   *     "rr": true,
+   *     "srv": ["2a"]
+   *   }
+   * }
+   */
+}
+
+// CNT용 JSON 본문 직렬화
+String serializeCNT(String resourceName){
+  String body;
+  StaticJsonDocument<512> doc;  // JSON 문서 생성 (최대 512바이트)
+
+  // m2m:cnt 객체 생성
+  JsonObject m2m_cnt = doc.createNestedObject("m2m:cnt");
+  m2m_cnt["rn"] = resourceName;  // 리소스 이름 (Resource Name)
+  m2m_cnt["mbs"] = 16384;        // 최대 바이트 크기 (Max Byte Size)
+
+  serializeJson(doc, body);  // JSON 객체를 문자열로 변환
+  return body;
+  /* 생성되는 JSON 예시:
+   * {
+   *   "m2m:cnt": {
+   *     "rn": "TEM",
+   *     "mbs": 16384
+   *   }
+   * }
+   */
+}
+
+// CIN용 JSON 본문 직렬화
+String serializeCIN(String content){
+  String body;
+  StaticJsonDocument<512> doc;  // JSON 문서 생성 (최대 512바이트)
+
+  // m2m:cin 객체 생성
+  JsonObject m2m_cin = doc.createNestedObject("m2m:cin");
+  m2m_cin["con"] = content;  // 전송할 데이터 내용 (Content)
+
+  serializeJson(doc, body);  // JSON 객체를 문자열로 변환
+  return body;
+  /* 생성되는 JSON 예시:
+   * {
+   *   "m2m:cin": {
+   *     "con": "25.3"
+   *   }
+   * }
+   */
+}
+
+// POST 요청 공통 함수 (내부용)
+int post(String path, String contentType, int ty, String body){
+  Serial.println("----------------------");
+  if (!wifi.connect(API_HOST, HTTPS_PORT)) {
+    Serial.println("[ERROR] TLS connect failed");
+    wifi.stop();
+    return -1;
+  }
+
+  String ri = nextRI();
+
+  // HTTP 요청 전송
+  wifi.println("POST " + path + " HTTP/1.1");
+  wifi.println("Host: " + String(API_HOST));
+  wifi.println("X-M2M-Origin: " + String(ORIGIN));
+  wifi.println("X-M2M-RI: " + ri);
+  wifi.println("X-M2M-RVI: " + String(RVI));
+  wifi.println("X-API-KEY: " + String(API_KEY));
+  wifi.println("X-AUTH-CUSTOM-LECTURE: " + String(LECTURE));
+  wifi.println("X-AUTH-CUSTOM-CREATOR: " + String(CREATOR));
+  wifi.println("Content-Type: application/json;ty=" + String(ty));
+  wifi.println("Content-Length: " + String(body.length()));
+  wifi.println("Accept: application/json");
+  wifi.println("Connection: close");
+  wifi.println();
+  wifi.print(body);
+
+  // 응답 대기
+  unsigned long t0 = millis();
+  while (!wifi.available()) {
+    if (millis() - t0 > DELAY) {
+      Serial.println("[ERROR] Response timeout (POST)");
+      wifi.stop();
+      return -1;
+    }
+    delay(10);
+  }
+
+  int httpStatus = readHttpStatusLine();
+
+  Serial.print("[POST ");
+  Serial.print(contentType);
+  Serial.print("] HTTP=");
+  Serial.println(httpStatus);
+
+  // 나머지 응답 출력 (헤더 + 본문)
+  if (wifi.available()) {
+    while (wifi.available()) {
+      Serial.write(wifi.read());
+    }
+    Serial.println();
+  }
+
+  wifi.stop();
+  Serial.println("----------------------");
+  return httpStatus;
+}
+
+// 디바이스 설정 (AE, CNT 확인 및 생성)
+void setDevice(){
+  Serial.println("Setup Started!");
+
+  String aePath = String(CSEBASE) + "/" + R4_AE;
+  String temPath = aePath + "/" + TEM_CNT;
+  String humPath = aePath + "/" + HUM_CNT;
+
+  // 1. AE 확인 -> 없으면 생성
+  int aeSc = get(aePath);
+  if (aeSc == 404 || aeSc == 403) {
+    Serial.println("[setDevice] AE not found -> creating...");
+    int cr = postAE(CSEBASE, R4_AE);
+    if (cr == 201 || cr == 200) {
+      Serial.println("[setDevice] AE created");
+    } else {
+      Serial.println("[setDevice] AE create failed");
+      ready = false;
+      return;
+    }
+  } else if (aeSc == 200 || aeSc == 201) {
+    Serial.println("[setDevice] AE exists");
+  } else {
+    Serial.println("[setDevice] AE check failed");
+    ready = false;
+    return;
+  }
+
+  // 2. TEM CNT 확인 -> 없으면 생성
+  int temSc = get(temPath);
+  if (temSc == 404 || temSc == 403) {
+    Serial.println("[setDevice] TEM CNT not found -> creating...");
+    int cr = postCNT(aePath, TEM_CNT);
+    if (cr == 201 || cr == 200) {
+      Serial.println("[setDevice] TEM CNT created");
+    } else {
+      Serial.println("[setDevice] TEM CNT create failed");
+    }
+  } else if (temSc == 200 || temSc == 201) {
+    Serial.println("[setDevice] TEM CNT exists");
+  }
+
+  // 3. HUM CNT 확인 -> 없으면 생성
+  int humSc = get(humPath);
+  if (humSc == 404 || humSc == 403) {
+    Serial.println("[setDevice] HUM CNT not found -> creating...");
+    int cr = postCNT(aePath, HUM_CNT);
+    if (cr == 201 || cr == 200) {
+      Serial.println("[setDevice] HUM CNT created");
+    } else {
+      Serial.println("[setDevice] HUM CNT create failed");
+    }
+  } else if (humSc == 200 || humSc == 201) {
+    Serial.println("[setDevice] HUM CNT exists");
+  }
+
+  ready = true;
+  Serial.println("Setup completed!");
 }
 
 // 프레임 초기화 함수
@@ -164,284 +477,4 @@ void displayTemperatureHumidity(int temp, int humid) {
   add_digit_to_frame(frame, humidOnes, 1, 6);  // x=1 (위쪽), y=6
 
   matrix.renderBitmap(frame, 8, 12);
-}
-
-/* WiFi 연결 시도 */
-bool ensureWifiConnected(unsigned long maxWaitMs) {
-  // 이미 연결되어 있으면 즉시 반환
-  if (WiFi.status() == WL_CONNECTED) return true;
-
-  Serial.print("[WiFi] Connecting to SSID: ");
-  Serial.println(SECRET_SSID);
-
-  // WiFi 연결 시작
-  WiFi.begin(SECRET_SSID, SECRET_PASS);
-
-  // 최대 대기 시간까지 연결 시도
-  unsigned long start = millis();
-  while (millis() - start < maxWaitMs) {
-    if (WiFi.status() == WL_CONNECTED) {
-      Serial.println("[WiFi] Connected.");
-      return true;
-    }
-    delay(250);  // 250ms 대기
-    Serial.print(".");  // 연결 시도 진행 표시
-  }
-  Serial.println();
-  return (WiFi.status() == WL_CONNECTED);
-}
-
-/* 디바이스 설정 (AE, CNT 확인 및 생성) */
-void setDevice(){
-  Serial.println("Setup Started!");
-
-  String aePath = String(CSEBASE) + "/" + AE_RN;
-  String temPath = aePath + "/" + TEM_CNT;
-  String humPath = aePath + "/" + HUM_CNT;
-
-  // 1. AE 확인 -> 없으면 생성
-  int aeSc = get(aePath);
-  if (aeSc == 404 || aeSc == 403) {
-    Serial.println("[setDevice] AE not found -> creating...");
-    int cr = post(CSEBASE, "AE", AE_RN, "");
-    if (cr == 201 || cr == 200) {
-      Serial.println("[setDevice] AE created");
-    } else {
-      Serial.println("[setDevice] AE create failed");
-      ready = false;
-      return;
-    }
-  } else if (aeSc == 200 || aeSc == 201) {
-    Serial.println("[setDevice] AE exists");
-  } else {
-    Serial.println("[setDevice] AE check failed");
-    ready = false;
-    return;
-  }
-
-  // 2. TEM CNT 확인 -> 없으면 생성
-  int temSc = get(temPath);
-  if (temSc == 404 || temSc == 403) {
-    Serial.println("[setDevice] TEM CNT not found -> creating...");
-    int cr = post(aePath, "CNT", TEM_CNT, "");
-    if (cr == 201 || cr == 200) {
-      Serial.println("[setDevice] TEM CNT created");
-    } else {
-      Serial.println("[setDevice] TEM CNT create failed");
-    }
-  } else if (temSc == 200 || temSc == 201) {
-    Serial.println("[setDevice] TEM CNT exists");
-  }
-
-  // 3. HUM CNT 확인 -> 없으면 생성
-  int humSc = get(humPath);
-  if (humSc == 404 || humSc == 403) {
-    Serial.println("[setDevice] HUM CNT not found -> creating...");
-    int cr = post(aePath, "CNT", HUM_CNT, "");
-    if (cr == 201 || cr == 200) {
-      Serial.println("[setDevice] HUM CNT created");
-    } else {
-      Serial.println("[setDevice] HUM CNT create failed");
-    }
-  } else if (humSc == 200 || humSc == 201) {
-    Serial.println("[setDevice] HUM CNT exists");
-  }
-
-  ready = true;
-  Serial.println("Setup completed!");
-}
-
-/* 고유 RI 생성 */
-String nextRI() {
-  String ri = "r4-";
-  ri += String(reqSeq++);
-  return ri;
-}
-
-/* HTTP 상태 라인 읽기 */
-int readHttpStatusLine() {
-  String line = wifi.readStringUntil('\n');
-  line.trim();
-
-  if (!line.startsWith("HTTP/")) return -1;
-
-  int sp1 = line.indexOf(' ');
-  if (sp1 < 0) return -1;
-  int sp2 = line.indexOf(' ', sp1 + 1);
-  if (sp2 < 0) sp2 = line.length();
-
-  String codeStr = line.substring(sp1 + 1, sp2);
-  return codeStr.toInt();
-}
-
-/* GET 요청 (AE, CNT, CIN) */
-int get(String path) {
-  Serial.println("----------------------");
-  if (!wifi.connect(HOST, PORT)) {
-    Serial.println("[ERROR] TLS connect failed");
-    wifi.stop();
-    return -1;
-  }
-
-  String ri = nextRI();
-
-  // HTTP 요청 전송
-  wifi.println("GET " + path + " HTTP/1.1");
-  wifi.println("Host: " + String(HOST));
-  wifi.println("X-M2M-Origin: " + String(ONEM2M_ORIGIN));
-  wifi.println("X-M2M-RI: " + ri);
-  wifi.println("X-M2M-RVI: " + String(RVI));
-  wifi.println("X-API-KEY: " + String(API_KEY));
-  wifi.println("X-AUTH-CUSTOM-LECTURE: " + String(LECTURE));
-  wifi.println("X-AUTH-CUSTOM-CREATOR: " + String(CREATOR));
-  wifi.println("Accept: application/json");
-  wifi.println("Connection: close");
-  wifi.println();
-
-  // 응답 대기
-  unsigned long t0 = millis();
-  while (!wifi.available()) {
-    if (millis() - t0 > 8000) {
-      Serial.println("[ERROR] Response timeout (GET)");
-      wifi.stop();
-      return -1;
-    }
-    delay(10);
-  }
-
-  int httpStatus = readHttpStatusLine();
-
-  Serial.print("[GET] HTTP=");
-  Serial.println(httpStatus);
-
-  // 나머지 응답 출력 (헤더 + 본문)
-  if (wifi.available()) {
-    while (wifi.available()) {
-      Serial.write(wifi.read());
-    }
-    Serial.println();
-  }
-
-  wifi.stop();
-  Serial.println("----------------------");
-  return httpStatus;
-}
-
-/* POST 요청 (AE, CNT, CIN) */
-int post(String path, String contentType, String name, String content){
-  Serial.println("----------------------");
-  if (!wifi.connect(HOST, PORT)) {
-    Serial.println("[ERROR] TLS connect failed");
-    wifi.stop();
-    return -1;
-  }
-
-  String ri = nextRI();
-  String body = serializeJsonBody(contentType, name, content);
-
-  // HTTP 요청 전송
-  wifi.println("POST " + path + " HTTP/1.1");
-  wifi.println("Host: " + String(HOST));
-  wifi.println("X-M2M-Origin: " + String(ONEM2M_ORIGIN));
-  wifi.println("X-M2M-RI: " + ri);
-  wifi.println("X-M2M-RVI: " + String(RVI));
-  wifi.println("X-API-KEY: " + String(API_KEY));
-  wifi.println("X-AUTH-CUSTOM-LECTURE: " + String(LECTURE));
-  wifi.println("X-AUTH-CUSTOM-CREATOR: " + String(CREATOR));
-
-  if(contentType.equals("AE")){
-    wifi.println("Content-Type: application/json;ty=2");
-  } else if(contentType.equals("CNT")){
-    wifi.println("Content-Type: application/json;ty=3");
-  } else if(contentType.equals("CIN")){
-    wifi.println("Content-Type: application/json;ty=4");
-  } else {
-    Serial.println("[ERROR] Invalid content type");
-    wifi.stop();
-    return -1;
-  }
-
-  wifi.println("Content-Length: " + String(body.length()));
-  wifi.println("Accept: application/json");
-  wifi.println("Connection: close");
-  wifi.println();
-  wifi.print(body);
-
-  // 응답 대기
-  unsigned long t0 = millis();
-  while (!wifi.available()) {
-    if (millis() - t0 > 8000) {
-      Serial.println("[ERROR] Response timeout (POST)");
-      wifi.stop();
-      return -1;
-    }
-    delay(10);
-  }
-
-  int httpStatus = readHttpStatusLine();
-
-  Serial.print("[POST ");
-  Serial.print(contentType);
-  Serial.print("] HTTP=");
-  Serial.println(httpStatus);
-
-  // 나머지 응답 출력 (헤더 + 본문)
-  if (wifi.available()) {
-    while (wifi.available()) {
-      Serial.write(wifi.read());
-    }
-    Serial.println();
-  }
-
-  wifi.stop();
-  Serial.println("----------------------");
-  return httpStatus;
-}
-
-/* JSON 본문 직렬화 */
-String serializeJsonBody(String contentType, String name, String content){
-  String body;
-  StaticJsonDocument<512> doc;
-
-  if(contentType.equals("AE")){
-    JsonObject m2m_ae = doc.createNestedObject("m2m:ae");
-    m2m_ae["rn"] = name;
-    m2m_ae["api"] = "NArduino";
-    m2m_ae["rr"] = true;
-    JsonArray srv = m2m_ae.createNestedArray("srv");
-    srv.add(RVI);
-  } else if(contentType.equals("CNT")){
-    JsonObject m2m_cnt = doc.createNestedObject("m2m:cnt");
-    m2m_cnt["rn"] = name;
-    m2m_cnt["mbs"] = 16384;
-  } else if(contentType.equals("CIN")){
-    JsonObject m2m_cin = doc.createNestedObject("m2m:cin");
-    m2m_cin["con"] = content;
-  }
-
-  serializeJson(doc, body);
-  return body;
-}
-
-/* WiFi 연결 상태 출력 */
-void printWifiStatus() {
-  if(WiFi.status() != WL_CONNECTED){
-    Serial.println("Wifi not connected!");
-    return;
-  }
-
-  // 연결된 네트워크의 SSID 출력
-  Serial.print("SSID: ");
-  Serial.println(WiFi.SSID());
-
-  // 보드의 IP 주소 출력
-  IPAddress ip = WiFi.localIP();
-  Serial.print("IP Address: ");
-  Serial.println(ip);
-
-  // 수신 신호 강도 출력
-  long rssi = WiFi.RSSI();
-  Serial.print("signal strength (RSSI):");
-  Serial.print(rssi);
-  Serial.println(" dBm");
 }
