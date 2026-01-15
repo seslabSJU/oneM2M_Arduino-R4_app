@@ -21,10 +21,10 @@ const int DELAY = 10000;              // 데이터 전송 주기 (10초)
 const char* RVI = "2a";               // oneM2M 릴리즈 버전
 
 // oneM2M 리소스 경로 설정
-const char* CSEBASE = "/Mobius";      // CSE Base 이름
-const char* R4_AE  = "R4_TUTO";       // Application Entity 이름
-const char* TEM_CNT = "TEM";          // 온도 Container 이름
-const char* HUM_CNT = "HUM";          // 습도 Container 이름
+String CSEBASE = "/Mobius";           // CSE Base 이름
+String R4_AE = String("R4_TUTO_") + String(ORIGIN);  // Application Entity 이름
+String TEM_CNT = "TEM";               // 온도 Container 이름
+String HUM_CNT = "HUM";               // 습도 Container 이름
 
 // 전역 변수
 bool ready = false;                   // oneM2M 리소스 초기화 완료 여부
@@ -72,7 +72,7 @@ void loop() {
   // 준비되지 않았으면 CB 확인 및 setDevice 재시도
   if (!ready) {
     Serial.println("[TRY] GET CB (CSEBase) ...");
-    int sc = get(String(CSEBASE));
+    int sc = get(CSEBASE);
     Serial.print("[CB] HTTP status = ");
     Serial.println(sc);
 
@@ -106,8 +106,8 @@ void loop() {
   displayTemperatureHumidity((int)temperature, (int)humidity);
 
   Serial.println("[POST] Sending state to server...");
-  postCIN(String(CSEBASE) + "/" + R4_AE + "/" + TEM_CNT, String(temperature));
-  postCIN(String(CSEBASE) + "/" + R4_AE + "/" + HUM_CNT, String(humidity));
+  postCIN(CSEBASE + "/" + R4_AE + "/" + TEM_CNT, String(temperature));
+  postCIN(CSEBASE + "/" + R4_AE + "/" + HUM_CNT, String(humidity));
 
   delay(DELAY);
 }
@@ -378,7 +378,7 @@ int post(String path, String contentType, int ty, String body){
 void setDevice(){
   Serial.println("Setup Started!");
 
-  String aePath = String(CSEBASE) + "/" + R4_AE;
+  String aePath = CSEBASE + "/" + R4_AE;
   String temPath = aePath + "/" + TEM_CNT;
   String humPath = aePath + "/" + HUM_CNT;
 
